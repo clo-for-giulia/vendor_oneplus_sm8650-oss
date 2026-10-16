@@ -1,0 +1,68 @@
+// Copyright (C) 2026 The YAAP Project
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Open-source reimplementation of the OPLUS under-display fingerprint HAL
+// (vendor.oplus.hardware.biometrics.fingerprint@2.1-service_uff).
+//
+// It implements android.hardware.biometrics.fingerprint.IFingerprint/default
+// (AIDL v3) and talks to the sensor through /dev/fingerprint_dev. The TEE is
+// reached through the platform QSEECom API (TZCom/Mink); see README.md.
+
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+cc_binary {
+    name: "vendor.oplus.hardware.biometrics.fingerprint@2.1-service_uff",
+    owner: "oneplus",
+    device_specific: true,
+    relative_install_path: "hw",
+
+    init_rc: ["etc/vendor.oplus.hardware.biometrics.fingerprint@2.1-service.rc"],
+    vintf_fragments: ["etc/manifest_oplus_fingerprint_aidl_v3.xml"],
+
+    local_include_dirs: ["include"],
+
+    srcs: [
+        "main.cpp",
+        "BiometricsFingerprintAidl.cpp",
+        "BiometricsFpSession.cpp",
+        "CancellationSignal.cpp",
+        "HalContext.cpp",
+        "IFingerprintCore.cpp",
+        "OpticalCore.cpp",
+        "FingerprintConfig.cpp",
+        "FingerprintNotify.cpp",
+        "FingerprintCommon.cpp",
+        "Device.cpp",
+        "FpCa.cpp",
+        "QseeCa.cpp",
+        "TouchAidl.cpp",
+        "Utils.cpp",
+    ],
+
+    shared_libs: [
+        "android.hardware.biometrics.fingerprint-V3-ndk",
+        "android.hardware.biometrics.common-V3-ndk",
+        "android.hardware.keymaster-V4-ndk",
+        // Platform QSEECom (TZCom/Mink) entry point, from the vendor partition.
+        "//vendor/oneplus/sm8650-common:libQSEEComAPI",
+        // OPLUS touch service, used to route the panel to the fingerprint driver.
+        "vendor.oplus.hardware.touch-V1-ndk",
+        "libbase",
+        "libbinder_ndk",
+        "libcutils",
+        "libdmabufheap",
+        "liblog",
+    ],
+
+    cpp_std: "c++20",
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+    ],
+
+    stl: "c++_shared",
+}
