@@ -68,6 +68,7 @@ class Device {
     void dispatchEvent(const driver::FingerprintMessage& message);
 
     int mFd = -1;
+    int mWakeFd = -1;
     std::atomic<bool> mRunning = false;
     std::thread mEventThread;
     EventCallback mCallback;

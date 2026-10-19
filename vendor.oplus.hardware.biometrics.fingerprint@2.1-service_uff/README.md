@@ -266,7 +266,8 @@ callback has recorded a sender port id. Each event arrives as a 16-byte
 `nlmsghdr` followed by `fingerprint_message_t` (`module`, `event`, `in_size`,
 `in_buf[128]`, `out_size`, `out_buf[128]`); the event code is at `+0x04` and
 touch coordinates land in `out_buf`. Events the optical path uses:
-`TP_TOUCHDOWN=4`, `TP_TOUCHUP=5`, `UI_READY=6`.
+`TP_TOUCHDOWN=4`, `TP_TOUCHUP=5`, `UI_READY=6`. The reader blocks on the
+socket plus an eventfd, which teardown signals to break it out of the wait.
 
 Touch flow: kernel `TP_TOUCHDOWN` → `HalContext::onDeviceEvent` →
 `IFingerprintCore::doTouchDownEvent` → `OpticalCore::authenticateDown` /

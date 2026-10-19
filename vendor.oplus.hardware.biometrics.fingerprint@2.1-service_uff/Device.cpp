@@ -12,6 +12,7 @@
 #include <linux/netlink.h>
 #include <poll.h>
 #include <android-base/logging.h>
+#include <sys/eventfd.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -32,8 +33,9 @@ constexpr char kTpPath[] = "/proc/touchpanel/fp_enable";
 constexpr size_t kTpValueSize = 2;
 // Touch service node the fingerprint switch lives on.
 constexpr int32_t kTpNodeFlag = 31;
-// How long the netlink reader waits between checks of the run flag.
-constexpr int kEventPollTimeoutMs = 100;
+// Timeout used only when the wake descriptor cannot be created; with it the
+// reader sleeps until an event or a teardown signal arrives.
+constexpr int kEventPollFallbackTimeoutMs = 100;
 
 // One netlink message: the header the kernel prepends to the payload.
 struct NetlinkMessage {
@@ -179,6 +181,10 @@ int Device::startEventLoop(EventCallback callback) {
     if (mFd < 0) {
         return -1;
     }
+    // A failed HAL init attempt can be retried with the reader already running.
+    if (mRunning) {
+        return 0;
+    }
     // Ask the driver for its netlink transport, then find out which one it
     // actually took.
     if (ioctlSimple(driver::kIocNetlinkInit) != 0) {
@@ -188,6 +194,13 @@ int Device::startEventLoop(EventCallback callback) {
     // queue when the query itself fails.
     int32_t transport = driver::kTransportInterrupt;
     (void)ioctl(mFd, driver::kIocReadNetlinkValue, &transport);
+
+    // Breaks the reader out of poll() at teardown; without it the reader would
+    // have to wake on a timer to notice the run flag.
+    mWakeFd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+    if (mWakeFd < 0) {
+        LOG(WARNING) << "Device: cannot create the wake descriptor: " << strerror(errno);
+    }
 
     mCallback = std::move(callback);
     mRunning = true;
@@ -201,10 +214,18 @@ void Device::stopEventLoop() {
         return;
     }
     mRunning = false;
+    if (mWakeFd >= 0) {
+        const uint64_t value = 1;
+        (void)write(mWakeFd, &value, sizeof(value));
+    }
     // Wakes a reader blocked in either transport so it can observe the flag.
     stopWaitFingerprintEvent();
     if (mEventThread.joinable()) {
         mEventThread.join();
+    }
+    if (mWakeFd >= 0) {
+        ::close(mWakeFd);
+        mWakeFd = -1;
     }
 }
 
@@ -249,11 +270,21 @@ void Device::runNetlinkLoop() {
         return;
     }
 
+    struct pollfd pfds[2] = {};
+    pfds[0].fd = fd;
+    pfds[0].events = POLLIN;
+    nfds_t pollCount = 1;
+    if (mWakeFd >= 0) {
+        pfds[1].fd = mWakeFd;
+        pfds[1].events = POLLIN;
+        pollCount = 2;
+    }
+    // Block until there is work; the timeout only exists for the case where no
+    // wake descriptor could be created.
+    const int pollTimeout = (mWakeFd >= 0) ? -1 : kEventPollFallbackTimeoutMs;
+
     while (mRunning) {
-        struct pollfd pfd = {};
-        pfd.fd = fd;
-        pfd.events = POLLIN;
-        const int ready = poll(&pfd, 1, kEventPollTimeoutMs);
+        const int ready = poll(pfds, pollCount, pollTimeout);
         if (ready < 0) {
             if (errno == EINTR) {
                 continue;
@@ -264,6 +295,12 @@ void Device::runNetlinkLoop() {
             break;
         }
         if (ready == 0) {
+            continue;
+        }
+        if (mWakeFd >= 0 && (pfds[1].revents & POLLIN) != 0) {
+            break;
+        }
+        if (pfds[0].revents == 0) {
             continue;
         }
 
