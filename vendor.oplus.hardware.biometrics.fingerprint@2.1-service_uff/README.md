@@ -179,8 +179,10 @@ the way the vendor's `QseeCa_dmabuf` does, so a command does not pay for an
 allocation, an mmap and their teardown.
 
 On a successful send the TA's log lines are printed from that same area
-(tagged `[talog]`, debug and verbose dropped), exactly like the vendor does, so
-a rejected command comes with the TA's own reason for it.
+(tagged `[talog]`, debug and verbose dropped), exactly like the vendor does.
+A rejected command always prints them, so it comes with the TA's own reason
+for it; on success they are opt-in through `persist.vendor.fingerprint.talog`,
+because printing them is a logd write per line on the capture path.
 
 > The TEE transport is the one piece not reimplemented: `libQSEEComAPI` is a
 > proprietary blob already present in the ROM. Everything above it — framing,
@@ -228,7 +230,6 @@ Re-declared in `include/FingerprintDriverAbi.h`.
 | `FP_IOC_RESET` | `0x4f02` |
 | `FP_IOC_ENABLE_IRQ` / `DISABLE_IRQ` | `0x4f03` / `0x4f04` |
 | `FP_IOC_ENABLE_POWER` / `DISABLE_POWER` | `0x4f07` / `0x4f08` |
-| `FP_IOC_RD_IRQ_VALUE` | `0x4f0d` |
 | `FP_IOC_CLEAN_TOUCH_FLAG` | `0x4f14` |
 | `FP_IOC_RESET_GPIO_CTL_HIGH/LOW` | `0x4f1a` / `0x4f19` |
 | `FP_IOC_IRQ_GPIO_CTL_HIGH/LOW` | `0x4f1b` / `0x4f1c` |
@@ -254,8 +255,7 @@ platform — the same switch goes through the OPLUS touch service instead: node 
 of `vendor.oplus.hardware.touch.IOplusTouch/default` is written with the mode via
 `touchWriteNodeFile`, after confirming it with `isTouchNodeSupport`. Either
 route happens when the session starts rather than when a touch arrives — the
-touch is what the routing is needed to receive. Each queued event is validated
-by reading the interrupt line with `FP_IOC_RD_IRQ_VALUE` (`0x4f0d`).
+touch is what the routing is needed to receive.
 
 Event transport: `FP_IOC_NETLINK_INIT` (`0x4f1d`) switches the driver to
 netlink, and `FP_IOC_RD_NETLINK_VALUE` (`0x4f1e`) reports the transport it ended

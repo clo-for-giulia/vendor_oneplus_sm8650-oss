@@ -144,15 +144,6 @@ int Device::cleanTouchStatus() {
     return ioctlSimple(driver::kIocCleanTouchStatus, &value);
 }
 
-int Device::checkIrqValue(int* value) {
-    uint32_t state = 0;
-    const int ret = ioctlSimple(driver::kIocReadIrqValue, &state);
-    if (ret == 0 && value != nullptr) {
-        *value = static_cast<int>(state);
-    }
-    return ret;
-}
-
 int Device::setTpEnabled(bool enable) {
     // The panel is held while the mode is changed, as the vendor service does,
     // and any touch it latched on the way in is dropped.
@@ -317,13 +308,7 @@ void Device::runInterruptLoop() {
 }
 
 void Device::dispatchEvent(const driver::FingerprintMessage& message) {
-    if (message.module == driver::kModuleTp) {
-        int irq = -1;
-        checkIrqValue(&irq);
-        LOG(INFO) << "Device: touch event " << message.event << " irq " << irq;
-    } else {
-        LOG(INFO) << "Device: event module " << message.module << " code " << message.event;
-    }
+    LOG(VERBOSE) << "Device: event module " << message.module << " code " << message.event;
     if (mCallback) {
         mCallback(message);
     }

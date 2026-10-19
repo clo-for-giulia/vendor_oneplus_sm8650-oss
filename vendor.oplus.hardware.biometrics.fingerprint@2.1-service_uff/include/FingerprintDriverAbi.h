@@ -33,8 +33,6 @@ constexpr unsigned long kIocEnableIrq = (kIocMagic << 8) | 3;
 constexpr unsigned long kIocDisableIrq = (kIocMagic << 8) | 4;
 constexpr unsigned long kIocEnablePower = (kIocMagic << 8) | 7;
 constexpr unsigned long kIocDisablePower = (kIocMagic << 8) | 8;
-// Reads the interrupt line state into the argument.
-constexpr unsigned long kIocReadIrqValue = (kIocMagic << 8) | 13;
 // Holds and releases the touch path around a panel mode change.
 constexpr unsigned long kIocWakeLockHold = (kIocMagic << 8) | 0x12;
 constexpr unsigned long kIocWakeLockRelease = (kIocMagic << 8) | 0x13;
@@ -65,9 +63,6 @@ enum class PowerState : int32_t {
 // ---------------------------------------------------------------------------
 // Event transport
 // ---------------------------------------------------------------------------
-
-// Sources the driver tags events with.
-constexpr int32_t kModuleTp = 0;
 
 // Event codes the optical path consumes.
 constexpr int kEventTpTouchdown = 4;

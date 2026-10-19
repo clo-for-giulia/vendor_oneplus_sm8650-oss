@@ -49,8 +49,6 @@ class Device {
     int setTpEnabled(bool enable);
     // Clears the panel's pending touch flag.
     int cleanTouchStatus();
-    // Reads the interrupt line state.
-    int checkIrqValue(int* value);
     // Holds the touch path while the panel mode is changed.
     int holdWakeLock(bool hold);
 

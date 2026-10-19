@@ -8,6 +8,7 @@
 
 #include <BufferAllocator/BufferAllocatorWrapper.h>
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -91,7 +92,15 @@ void writeU32(uint8_t* p, uint32_t value) {
 // The TA writes its own log into the payload buffer right past the command.
 // The vendor service prints those lines after every successful send, dropping
 // the debug and verbose levels; they carry the TA's diagnostics, so they are
-// the first thing to read when a command is rejected.
+// the first thing to read when a command is rejected. On the success path they
+// are a logd write per line in the middle of a capture sequence, so they are
+// opt-in there and always printed for a failed status.
+bool taLogEnabled() {
+    static const bool enabled =
+            ::android::base::GetBoolProperty("persist.vendor.fingerprint.talog", false);
+    return enabled;
+}
+
 void dumpTaLog(const void* payload, uint32_t cmdLength, uint32_t extraLength) {
     if (extraLength < 1) {
         return;
@@ -207,8 +216,12 @@ int QseeCa::doSendCommand(std::span<uint8_t> buffer) {
     const int ret = QSEECom_send_modified_cmd(mHandle, shared, kSharedHeaderSize, shared,
                                               kSharedHeaderSize, &ifd);
 
+    uint32_t status = 0;
     if (ret == 0) {
-        dumpTaLog(mPayloadMap, length, extra);
+        status = readU32(shared + kSharedStatusOffset);
+        if (status != 0 || taLogEnabled()) {
+            dumpTaLog(mPayloadMap, length, extra);
+        }
     }
 
     memcpy(buffer.data(), mPayloadMap, length);
@@ -218,7 +231,6 @@ int QseeCa::doSendCommand(std::span<uint8_t> buffer) {
         return kTaSendFailed;
     }
 
-    const uint32_t status = readU32(shared + kSharedStatusOffset);
     if (status != 0) {
         LOG(ERROR) << "QseeCa: TA status " << status;
         return static_cast<int>(status);
