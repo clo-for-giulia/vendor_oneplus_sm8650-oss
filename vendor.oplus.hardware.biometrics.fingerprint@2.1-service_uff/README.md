@@ -174,6 +174,10 @@ The dma-buf is rounded up to a page even though the command is smaller. The TA
 writes its response and log past the command itself, and the TEE rejects the
 invoke with `-EMSGSIZE` once that output outgrows the buffer — which is why the
 vendor's allocator applies `(size + 0xfff) & ~0xfff` in both of its send paths.
+The buffer is kept on `QseeCa` and only grows when a command needs more room,
+the way the vendor's `QseeCa_dmabuf` does, so a command does not pay for an
+allocation, an mmap and their teardown.
+
 On a successful send the TA's log lines are printed from that same area
 (tagged `[talog]`, debug and verbose dropped), exactly like the vendor does, so
 a rejected command comes with the TA's own reason for it.

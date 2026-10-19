@@ -139,11 +139,36 @@ int QseeCa::doStartTa(TaName name) {
 }
 
 int QseeCa::doCloseTa() {
+    std::lock_guard<std::mutex> lock(mMutex);
     if (mHandle != nullptr) {
         QSEECom_shutdown_app(&mHandle);
         mHandle = nullptr;
     }
+    freePayloadBuffer();
     return 0;
+}
+
+int QseeCa::managePayloadBuffer(uint32_t size) {
+    if (size <= mPayloadSize) {
+        return 0;
+    }
+    void* map = nullptr;
+    const int fd = allocDmaBuf(size, &map);
+    if (fd < 0) {
+        return -1;
+    }
+    freePayloadBuffer();
+    mPayloadFd = fd;
+    mPayloadMap = map;
+    mPayloadSize = size;
+    return 0;
+}
+
+void QseeCa::freePayloadBuffer() {
+    freeDmaBuf(mPayloadFd, mPayloadMap, mPayloadSize);
+    mPayloadFd = -1;
+    mPayloadMap = nullptr;
+    mPayloadSize = 0;
 }
 
 int QseeCa::doSendCommand(std::span<uint8_t> buffer) {
@@ -161,31 +186,32 @@ int QseeCa::doSendCommand(std::span<uint8_t> buffer) {
     // exact-size buffer is rejected by the TEE once the response outgrows it.
     const uint32_t allocated = alignPage(total);
 
-    void* payloadMap = nullptr;
-    const int payloadFd = allocDmaBuf(allocated, &payloadMap);
-    if (payloadFd < 0) {
+    std::lock_guard<std::mutex> lock(mMutex);
+    if (managePayloadBuffer(allocated) != 0) {
         LOG(ERROR) << "QseeCa: payload dma-buf allocation failed";
         return -1;
     }
-    memcpy(payloadMap, buffer.data(), length);
+    // Start from a clean log area: the TA only writes what it logs, and
+    // dumpTaLog reads until the first NUL.
+    memset(mPayloadMap, 0, mPayloadSize);
+    memcpy(mPayloadMap, buffer.data(), length);
 
     auto* shared = static_cast<uint8_t*>(mHandle->ion_sbuffer);
     memset(shared, 0, kSharedHeaderSize);
     writeU32(shared, total);
 
     qsee::IonFdInfo ifd = {};
-    ifd.data[0].fd = payloadFd;
+    ifd.data[0].fd = mPayloadFd;
     ifd.data[0].cmdBufOffset = kCmdBufOffset;
 
     const int ret = QSEECom_send_modified_cmd(mHandle, shared, kSharedHeaderSize, shared,
                                               kSharedHeaderSize, &ifd);
 
     if (ret == 0) {
-        dumpTaLog(payloadMap, length, extra);
+        dumpTaLog(mPayloadMap, length, extra);
     }
 
-    memcpy(buffer.data(), payloadMap, length);
-    freeDmaBuf(payloadFd, payloadMap, allocated);
+    memcpy(buffer.data(), mPayloadMap, length);
 
     if (ret != 0) {
         LOG(ERROR) << "QseeCa: send_modified_cmd failed: " << ret;
