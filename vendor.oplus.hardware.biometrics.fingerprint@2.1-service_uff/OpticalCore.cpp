@@ -90,10 +90,12 @@ int OpticalCore::enrollDown() {
     }
 
     if (mContext->common() != nullptr) {
-        mContext->common()->waitUiready(kEnrollUireadyTimeoutMs);
+        const int uireadyRet = mContext->common()->waitUiready(kEnrollUireadyTimeoutMs);
         // A cancel wakes the wait so this worker can abort its TA state before
-        // the cancellation signal acknowledges the framework.
-        if (isCancelled()) {
+        // the cancellation signal acknowledges the framework. A timeout means
+        // the overlay never became ready; capturing outside that window only
+        // produces a bad frame and leaves the operation open.
+        if (uireadyRet != 0 || isCancelled()) {
             return abortEnroll(-1);
         }
     }
@@ -168,8 +170,11 @@ int OpticalCore::authenticateDown() {
     }
 
     if (mContext->common() != nullptr) {
-        mContext->common()->waitUiready(kAuthUireadyTimeoutMs);
-        if (isCancelled()) {
+        const int uireadyRet = mContext->common()->waitUiready(kAuthUireadyTimeoutMs);
+        // The same overlay handshake gates authentication. A failed wait must
+        // not fall through to a capture: the finger may already be gone and the
+        // TA would be left in an operation that never produced a frame.
+        if (uireadyRet != 0 || isCancelled()) {
             return abortAuth(-1);
         }
     }

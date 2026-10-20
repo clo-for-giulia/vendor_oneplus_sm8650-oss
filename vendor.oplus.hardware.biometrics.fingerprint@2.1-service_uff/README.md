@@ -271,9 +271,13 @@ socket plus an eventfd, which teardown signals to break it out of the wait.
 
 Touch flow: kernel `TP_TOUCHDOWN` → `HalContext::onDeviceEvent` → the touch
 worker (the vendor's EventThd/WorkThd split) → `IFingerprintCore::doTouchDownEvent`
-→ `OpticalCore::authenticateDown` / `enrollDown` → `captureImg`. The worker
-waits for `UI_READY` (posted by the reader) for up to 1000/500 ms; keeping the
-capture off the reader is what lets that event arrive while it waits. In the
+→ `OpticalCore::authenticateDown` / `enrollDown` → `captureImg`. A new
+touch-down drops any UI-ready post left by screen-off, wake or the previous
+operation, so the capture cannot consume an overlay event that does not belong
+to it. The worker then waits for `UI_READY` (posted by the reader) for up to
+1000/500 ms; keeping the capture off the reader is what lets that event arrive
+while it waits. A timeout or cancel aborts the operation instead of capturing
+outside the overlay window. In the
 keyguard's interaction-detect mode the touch only reports
 `onInteractionDetected` and lets the framework start the real authentication,
 which is what the vendor does with work mode 17. `enrollDown` first re-reads

@@ -37,6 +37,12 @@ void FingerprintCommon::postUiready() {
     mCond.notify_all();
 }
 
+void FingerprintCommon::resetUiready() {
+    std::lock_guard<std::mutex> lock(mMutex);
+    mUireadyPosted = false;
+    mUireadyCancelled = false;
+}
+
 void FingerprintCommon::cancelUiready() {
     {
         std::lock_guard<std::mutex> lock(mMutex);

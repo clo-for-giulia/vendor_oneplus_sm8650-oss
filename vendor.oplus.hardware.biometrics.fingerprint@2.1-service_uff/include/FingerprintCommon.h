@@ -23,6 +23,11 @@ class FingerprintCommon {
     // Signals the UI-ready wait.
     void postUiready();
 
+    // Drops a UI-ready post left behind by the previous operation. A new touch
+    // must wait for the overlay belonging to that touch, not consume an event
+    // that arrived while the display was off or waking.
+    void resetUiready();
+
     // Wakes a pending waitUiready and makes it fail. Used when an operation is
     // cancelled or the HAL is shutting down, so a capture waiting for the UI
     // does not keep the worker busy.

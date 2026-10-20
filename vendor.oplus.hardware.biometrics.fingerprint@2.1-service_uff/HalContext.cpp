@@ -102,8 +102,14 @@ void HalContext::postTouchDown() {
         std::lock_guard<std::mutex> lock(mWorkMutex);
         // Drop a second down while one is queued or running; the framework is
         // not ready for it and the vendor drops these too.
-        if (!mWorkRunning || mTouchPending) {
+        if (!mWorkRunning || mTouchPending || mWorkActive) {
             return;
+        }
+        // The overlay event belongs to the touch that is starting. Drop a post
+        // left over from screen-off, wake or the previous operation before the
+        // worker starts waiting for this one.
+        if (mCommon != nullptr) {
+            mCommon->resetUiready();
         }
         mTouchPending = true;
     }
