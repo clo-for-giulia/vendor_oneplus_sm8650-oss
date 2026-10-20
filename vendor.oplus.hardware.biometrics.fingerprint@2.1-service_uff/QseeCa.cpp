@@ -192,10 +192,15 @@ int QseeCa::doSendCommand(std::span<uint8_t> buffer) {
         LOG(ERROR) << "QseeCa: payload dma-buf allocation failed";
         return -1;
     }
-    // Start from a clean log area: the TA only writes what it logs, and
-    // dumpTaLog reads until the first NUL.
-    memset(mPayloadMap, 0, mPayloadSize);
-    memcpy(mPayloadMap, buffer.data(), length);
+    // The command itself is already zeroed. Only the first byte of the TA log
+    // area needs clearing: the TA writes a NUL-terminated log there, and
+    // dumpTaLog must not walk into the previous command's text when this one
+    // logs nothing.
+    auto* payload = static_cast<uint8_t*>(mPayloadMap);
+    memcpy(payload, buffer.data(), length);
+    if (extra > 0) {
+        payload[length] = '\0';
+    }
 
     auto* shared = static_cast<uint8_t*>(mHandle->ion_sbuffer);
     memset(shared, 0, kSharedHeaderSize);
@@ -212,11 +217,11 @@ int QseeCa::doSendCommand(std::span<uint8_t> buffer) {
     if (ret == 0) {
         status = readU32(shared + kSharedStatusOffset);
         if (status != 0 || taLogEnabled()) {
-            dumpTaLog(mPayloadMap, length, extra);
+            dumpTaLog(payload, length, extra);
         }
     }
 
-    memcpy(buffer.data(), mPayloadMap, length);
+    memcpy(buffer.data(), payload, length);
 
     if (ret != 0) {
         LOG(ERROR) << "QseeCa: send_modified_cmd failed: " << ret;
