@@ -6,6 +6,7 @@
 
 #include "FingerprintConfig.h"
 
+#include "ByteBuffer.h"
 #include "FpCa.h"
 #include "TaProtocol.h"
 #include "Utils.h"
@@ -39,20 +40,6 @@ constexpr size_t kBaseConfigProjectOffset = 0x30;
 constexpr size_t kBaseConfigLcdOffset = 0x50;
 constexpr size_t kBaseConfigLockStateOffset = 0x90;
 constexpr size_t kBaseConfigFieldSize = 0x20;
-
-uint32_t readU32(const std::vector<uint8_t>& buffer, size_t offset) {
-    uint32_t value = 0;
-    if (offset + sizeof(value) <= buffer.size()) {
-        memcpy(&value, buffer.data() + offset, sizeof(value));
-    }
-    return value;
-}
-
-void writeU32(std::vector<uint8_t>& buffer, size_t offset, uint32_t value) {
-    if (offset + sizeof(value) <= buffer.size()) {
-        memcpy(buffer.data() + offset, &value, sizeof(value));
-    }
-}
 
 // Copies a string into one of the base configuration's fixed 32-byte fields.
 void writeField(std::vector<uint8_t>& buffer, size_t offset, const std::string& value) {

@@ -207,9 +207,8 @@ framing and sets `cmd_len` (`0x130`) itself. Gated by TA config selector `0x66`.
 
 `IFingerprintCore::init` sends cmd `0x7d0`; if the cali state is 0 it reads
 `/mnt/vendor/persist/fingerprint/fingerprint_cali.bin` and streams it to the TA
-with cmd `0x15` (module 5) in 1 MB chunks. It then binds group 0
-(`SetActiveGroup` 2002 with `/data/vendor_de/0/fpdata`) as the initial group.
-Each session binds its own user's directory (`/data/vendor_de/<userId>/fpdata`)
+with cmd `0x15` (module 5) in 1 MB chunks. It does not bind a group itself:
+each session binds its own user's directory (`/data/vendor_de/<userId>/fpdata`)
 when it is created — the point where the vendor's `createSession` binds it.
 One TA serves every user and the framework keeps a single active session per
 sensor, replacing it on a user switch, so no later command has to rebind:

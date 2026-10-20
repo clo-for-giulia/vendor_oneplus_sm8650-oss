@@ -179,15 +179,15 @@ int Device::setTpEnabled(bool enable) {
                 mTpFd = -1;
             }
         } else {
-            LOG(INFO) << "Device: " << kTpPath << " is not reachable (" << strerror(errno)
-                      << "), routing through the touch service";
+            LOG(VERBOSE) << "Device: " << kTpPath << " is not reachable (" << strerror(errno)
+                         << "), routing through the touch service";
             ret = TouchAidl::instance().writeNode(kTpNodeFlag, enable ? 1 : 0);
         }
     }
 
     holdWakeLock(false);
 
-    LOG(INFO) << "Device: touch panel " << (enable ? "enable" : "disable") << " -> " << ret;
+    LOG(VERBOSE) << "Device: touch panel " << (enable ? "enable" : "disable") << " -> " << ret;
     return ret;
 }
 

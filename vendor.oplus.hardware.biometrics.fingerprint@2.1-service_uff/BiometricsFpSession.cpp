@@ -29,6 +29,10 @@ namespace android {
 namespace fingerprint {
 
 namespace {
+// Per-user directory the TA keeps the fingerprint data in. The framework keeps
+// one active session per sensor, so a session binds this once when created.
+constexpr char kUserDataPathFormat[] = "/data/vendor_de/%d/fpdata";
+
 // The TA takes the auth token in its own serialized form rather than the AIDL
 // one: a leading zero byte, the identifiers raw, the authenticator type and
 // timestamp byte swapped and the MAC last. Reproduced from the vendor session,

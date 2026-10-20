@@ -19,12 +19,6 @@
 namespace android {
 namespace fingerprint {
 
-// Per-user directory the TA keeps the fingerprint data in. Sessions for
-// different users share one TA, so every data-touching command re-binds the
-// active group first; init binds user 0 for the queries made before any
-// session exists.
-constexpr char kUserDataPathFormat[] = "/data/vendor_de/%d/fpdata";
-
 class HalContext;
 class FingerprintNotify;
 

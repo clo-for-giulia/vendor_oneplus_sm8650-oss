@@ -6,6 +6,8 @@
 
 #include "QseeCa.h"
 
+#include "ByteBuffer.h"
+
 #include <BufferAllocator/BufferAllocatorWrapper.h>
 #include <android-base/logging.h>
 #include <android-base/properties.h>
@@ -77,16 +79,6 @@ void freeDmaBuf(int fd, void* map, size_t size) {
     if (fd >= 0) {
         ::close(fd);
     }
-}
-
-uint32_t readU32(const uint8_t* p) {
-    uint32_t value = 0;
-    memcpy(&value, p, sizeof(value));
-    return value;
-}
-
-void writeU32(uint8_t* p, uint32_t value) {
-    memcpy(p, &value, sizeof(value));
 }
 
 // The TA writes its own log into the payload buffer right past the command.

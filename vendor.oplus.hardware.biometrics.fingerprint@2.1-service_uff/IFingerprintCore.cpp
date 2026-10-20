@@ -6,6 +6,7 @@
 
 #include "IFingerprintCore.h"
 
+#include "ByteBuffer.h"
 #include "Device.h"
 #include "FpCa.h"
 #include "FingerprintConfig.h"
@@ -19,7 +20,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <span>
@@ -33,22 +33,6 @@ constexpr uint32_t kCaliChunk = 0x100000;
 // Panel node the vendor's factory test reads the maximum brightness from; the
 // authenticate start passes it to the TA, which uses it to tune the capture.
 constexpr char kMaxBrightnessPath[] = "/sys/kernel/oplus_display/max_brightness";
-
-uint32_t readU32(std::span<const uint8_t> buffer, size_t offset) {
-    uint32_t value = 0;
-    if (offset + sizeof(value) <= buffer.size()) {
-        memcpy(&value, buffer.data() + offset, sizeof(value));
-    }
-    return value;
-}
-int32_t readI32(std::span<const uint8_t> buffer, size_t offset) {
-    return static_cast<int32_t>(readU32(buffer, offset));
-}
-void writeU32(std::span<uint8_t> buffer, size_t offset, uint32_t value) {
-    if (offset + sizeof(value) <= buffer.size()) {
-        memcpy(buffer.data() + offset, &value, sizeof(value));
-    }
-}
 
 // Read once and kept: the vendor caches this in its factory-test state at init.
 uint32_t panelMaxBrightness() {
@@ -131,16 +115,6 @@ int IFingerprintCore::init() {
             LOG(WARNING) << "IFingerprintCore: HMAC key transfer failed";
         }
     }
-
-    // Bind the user database so the queries the framework makes at boot, before
-    // any session exists — the authenticator id and the enrollment list — are
-    // answered from the real state instead of an empty TA. The framework
-    // reconciles its own records against the enrollment list, and removes
-    // templates it does not know, which is how enrollments left behind by a
-    // different ROM get cleaned up.
-    char path[48];
-    snprintf(path, sizeof(path), kUserDataPathFormat, 0);
-    setActiveGroup(0, path);
     return 0;
 }
 
@@ -150,8 +124,11 @@ int IFingerprintCore::setActiveGroup(uint32_t groupId, const char* path) {
     if (path != nullptr && strlen(path) <= 0x7f) {
         memcpy(request.data() + 0x34, path, strlen(path));
     }
-    mGroupId = groupId;
-    return sendTa(request);
+    const int ret = sendTa(request);
+    if (ret == 0) {
+        mGroupId = groupId;
+    }
+    return ret;
 }
 
 int IFingerprintCore::preEnroll() {
