@@ -362,8 +362,12 @@ ndk::ScopedAStatus BiometricsFpSession::close() {
     mClosed = true;
     setTouchRouting(false);
     if (mContext != nullptr && mContext->core() != nullptr) {
-        // Drops the session's work mode, so touches arriving after it do nothing.
+        // Drops the session's work mode, so touches arriving after it do nothing,
+        // then aborts any operation still open in the TA. The vendor posts the
+        // same cancel before it reports the session closed; without it a user
+        // switch can leave the next session's first command in a stale state.
         mContext->core()->setWorkMode(WorkMode::Idle);
+        mContext->core()->cancel();
     }
     if (mContext != nullptr && mContext->notify() != nullptr) {
         mContext->notify()->setNotify(nullptr);
