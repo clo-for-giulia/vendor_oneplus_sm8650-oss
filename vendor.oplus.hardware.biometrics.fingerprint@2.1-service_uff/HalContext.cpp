@@ -180,8 +180,19 @@ int HalContext::init() {
     // The driver is switched to the netlink transport here; this is what
     // delivers touch and UI-ready events. Started unconditionally so a TA
     // config query failure cannot leave the HAL without input events.
-    mDevice->startEventLoop(
-            [this](const driver::FingerprintMessage& message) { onDeviceEvent(message); });
+    if (mDevice->startEventLoop(
+                [this](const driver::FingerprintMessage& message) {
+                    onDeviceEvent(message);
+                }) != 0) {
+        LOG(ERROR) << "HalContext: failed to start the fingerprint event reader";
+        return -1;
+    }
+
+    // Arm the HBP low-power path now, before the first screen-off. The normal
+    // screen-on report bit is enabled only while an operation is active.
+    if (mDevice->setTpEnabled(true) != 0) {
+        LOG(WARNING) << "HalContext: cannot arm the touch panel low-power path";
+    }
 
     mNotify = std::make_unique<FingerprintNotify>();
     mCore = std::unique_ptr<IFingerprintCore>(createFingerprintCore(this));
@@ -216,6 +227,7 @@ int HalContext::deinit() {
     if (mDevice != nullptr) {
         mDevice->setIrqEnabled(false);
         mDevice->setIntr3Enabled(false);
+        mDevice->setTpEnabled(false);
         mDevice->stopEventLoop();
     }
 

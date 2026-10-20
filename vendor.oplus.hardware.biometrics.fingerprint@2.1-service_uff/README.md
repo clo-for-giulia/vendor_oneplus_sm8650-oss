@@ -245,17 +245,23 @@ and `FP_IOC_ENABLE_INTR3` (`0x4f22`), and disarmed with `0x4f04` / `0x4f23`.
 Both are in/out: the argument is zero on entry and the driver writes its state
 back into it. The driver reports nothing until both lines are enabled.
 
-The touch panel also has to be pointed at the fingerprint driver before it
-reports anything: writing the mode to `/proc/touchpanel/fp_enable` routes it,
-held with `FP_IOC_WAKE_LOCK_HOLD` / `RELEASE` (`0x4f12` / `0x4f13`) and
-followed by `FP_IOC_CLEAN_TOUCH_STATUS` (`0x4f14`). Until then the panel keeps
-delivering touches to the framework and the driver sees nothing. When that node
-is not reachable from the fingerprint domain — the touch daemon owns it on this
-platform — the same switch goes through the OPLUS touch service instead: node 31
-of `vendor.oplus.hardware.touch.IOplusTouch/default` is written with the mode via
-`touchWriteNodeFile`, after confirming it with `isTouchNodeSupport`. Either
-route happens when the session starts rather than when a touch arrives — the
-touch is what the routing is needed to receive.
+The Synaptics HBP stack exposes `/proc/touchpanel/fingerprint_hal`, a bitmask
+owned by the fingerprint HAL. Bit 0 arms the low-power path and is written once
+at HAL startup, before the first screen-off. Bit 1 enables fingerprint down/up
+reporting from the normal screen-on touch path and is written when an
+enrollment, authentication or interaction-detect operation starts. The driver
+holds the touch path with `FP_IOC_WAKE_LOCK_HOLD` / `RELEASE` (`0x4f12` /
+`0x4f13`) and clears the pending touch flag with `FP_IOC_CLEAN_TOUCH_STATUS`
+(`0x4f14`) around mode changes. The proc node is opened once and kept open;
+the first open retries briefly because the driver may publish it just after
+boot. The last applied mode is remembered, so repeating the current state is a
+no-op.
+
+The older `oplus_touchscreen_v2` stack exposes `/proc/touchpanel/fp_enable`.
+If `fingerprint_hal` is absent, the HAL falls back to
+`fingerprint_active`/`fp_enable` for the low-power path, but those legacy nodes
+cannot generate screen-on fingerprint touches. The fingerprint HAL has no
+dependency on the OPLUS touch AIDL service or its `touchDaemon` trigger path.
 
 Event transport: `FP_IOC_NETLINK_INIT` (`0x4f1d`) switches the driver to
 netlink, and `FP_IOC_RD_NETLINK_VALUE` (`0x4f1e`) reports the transport it ended

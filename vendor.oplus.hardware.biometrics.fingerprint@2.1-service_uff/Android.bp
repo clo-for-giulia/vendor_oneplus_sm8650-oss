@@ -38,7 +38,6 @@ cc_binary {
         "Device.cpp",
         "FpCa.cpp",
         "QseeCa.cpp",
-        "TouchAidl.cpp",
         "Utils.cpp",
     ],
 
@@ -48,8 +47,6 @@ cc_binary {
         "android.hardware.keymaster-V4-ndk",
         // Platform QSEECom (TZCom/Mink) entry point, from the vendor partition.
         "//vendor/oneplus/sm8650-common:libQSEEComAPI",
-        // OPLUS touch service, used to route the panel to the fingerprint driver.
-        "vendor.oplus.hardware.touch-V1-ndk",
         "libbase",
         "libbinder_ndk",
         "libcutils",

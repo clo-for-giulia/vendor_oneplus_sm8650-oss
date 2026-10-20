@@ -138,17 +138,18 @@ BiometricsFpSession::makeCancellationSignal() {
         // operation — screen off, a higher-priority client, dismissal — and
         // never closes the session in between, so this is where the operation
         // ends. Stop accepting results from the operation, abort it in the TA,
-        // wake the worker if it is waiting for UI_READY and release the touch
-        // routing. Acknowledge immediately; the next operation waits for the
-        // worker before it touches the TA, so cleanup does not delay the
-        // framework's screen-off/wake handoff.
+        // wake the worker if it is waiting for UI_READY and disable screen-on
+        // touch reporting. The low-power arm stays enabled. Acknowledge
+        // immediately; the next operation waits for the worker before it
+        // touches the TA, so cleanup does not delay the framework's
+        // screen-off/wake handoff.
         mAcceptNotifications = false;
         mContext->core()->setWorkMode(WorkMode::Idle);
         mContext->core()->cancel();
         if (mContext->common() != nullptr) {
             mContext->common()->cancelUiready();
         }
-        setTouchRouting(false);
+        setTouchReport(false);
         if (mCallback != nullptr) {
             mCallback->onError(Error::CANCELED, 0);
         }
@@ -209,9 +210,9 @@ void BiometricsFpSession::dispatchTouch(bool down) {
     }
 }
 
-void BiometricsFpSession::setTouchRouting(bool enable) {
+void BiometricsFpSession::setTouchReport(bool enable) {
     if (mContext != nullptr && mContext->device() != nullptr) {
-        mContext->device()->setTpEnabled(enable);
+        mContext->device()->setTpReportEnabled(enable);
     }
 }
 
@@ -253,7 +254,7 @@ ndk::ScopedAStatus BiometricsFpSession::enroll(const HardwareAuthToken& hat,
     core->preEnroll();
     core->enroll(toTaAuthToken(hat), static_cast<uint32_t>(mUserId));
     core->setWorkMode(WorkMode::Enroll);
-    setTouchRouting(true);
+    setTouchReport(true);
     if (out != nullptr) {
         *out = makeCancellationSignal();
     }
@@ -274,7 +275,7 @@ ndk::ScopedAStatus BiometricsFpSession::authenticate(int64_t operationId,
     // the TA its start command now; the touch path sends it as a fallback if
     // this did not run.
     core->prepareAuthenticate();
-    setTouchRouting(true);
+    setTouchReport(true);
     if (out != nullptr) {
         *out = makeCancellationSignal();
     }
@@ -287,11 +288,11 @@ ndk::ScopedAStatus BiometricsFpSession::detectInteraction(
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
     }
     // No TA command here: the group was bound when the session was created and
-    // the vendor's detect path only arms the mode and the touch routing.
+    // the detect path only arms the work mode and screen-on touch reporting.
     mContext->waitForWorkIdle();
     mAcceptNotifications = true;
     mContext->core()->setWorkMode(WorkMode::Detect);
-    setTouchRouting(true);
+    setTouchReport(true);
     if (out != nullptr) {
         *out = makeCancellationSignal();
     }
@@ -392,7 +393,7 @@ ndk::ScopedAStatus BiometricsFpSession::close() {
     if (mContext != nullptr && mContext->common() != nullptr) {
         mContext->common()->cancelUiready();
     }
-    setTouchRouting(false);
+    setTouchReport(false);
     if (mContext != nullptr) {
         // Do not let the next session run while this one is still unwinding.
         mContext->waitForWorkIdle();

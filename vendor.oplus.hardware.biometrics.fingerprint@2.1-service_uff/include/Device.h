@@ -44,10 +44,13 @@ class Device {
     int setIrqEnabled(bool enable);
     int setIntr3Enabled(bool enable);
 
-    // Points the touch panel at the fingerprint driver. Until this is set the
-    // panel keeps delivering touches to the framework and the driver sees
-    // nothing.
+    // Arms the low-power touch path. On the HBP kernel interface this is bit 0
+    // of fingerprint_hal; it must be set before the screen turns off.
     int setTpEnabled(bool enable);
+    // Enables or disables fingerprint down/up reporting from the normal
+    // screen-on touch path. This is bit 1 of the HBP fingerprint_hal node; it
+    // arms the low-power bit too if the startup arm raced the driver.
+    int setTpReportEnabled(bool enable);
     // Clears the panel's pending touch flag.
     int cleanTouchStatus();
     // Holds the touch path while the panel mode is changed.
@@ -59,6 +62,13 @@ class Device {
 
   private:
     int ioctlSimple(unsigned long request, void* arg = nullptr);
+    // Opens the active touch driver's fingerprint control node. Requires
+    // mTpMutex to be held.
+    int openTpNodeLocked();
+    // True when fingerprint_hal, rather than a legacy node, is open.
+    bool isHalTpNode() const;
+    // Writes the current touch mode bitmask. Requires mTpMutex to be held.
+    int writeTpModeLocked();
     // Runs the reader for the transport the driver selected.
     void eventThreadLoop(int32_t transport);
     // Blocks on the netlink socket the driver unicasts events to.
@@ -70,10 +80,15 @@ class Device {
 
     int mFd = -1;
     int mWakeFd = -1;
-    // Kept open across operations; the node may be unavailable, in which case
-    // the write goes through the touch service.
+    // Kept open across operations. The touch driver publishes the control node
+    // shortly after boot, so the first open retries briefly.
     int mTpFd = -1;
+    const char* mTpPath = nullptr;
     std::mutex mTpMutex;
+    // Last successfully applied touch-panel mode.
+    bool mTpEnabled = false;
+    bool mTpReportEnabled = false;
+    bool mTpStateKnown = false;
     std::atomic<bool> mRunning = false;
     std::thread mEventThread;
     EventCallback mCallback;
