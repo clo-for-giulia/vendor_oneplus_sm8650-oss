@@ -15,6 +15,7 @@
 #include <android-base/logging.h>
 #include <unistd.h>
 
+#include <array>
 #include <vector>
 
 namespace android {
@@ -190,7 +191,8 @@ int OpticalCore::authenticateDown() {
 
     int32_t fingerId = 0;
     int32_t result = 0;
-    ret = authenticateCompare(0, &fingerId, &result);
+    std::array<uint8_t, kHwAuthTokenSize> token = {};
+    ret = authenticateCompare(0, &fingerId, &result, &token);
     if (ret != 0) {
         reportError(isCancelled() ? FingerprintMsg::kErrorCanceled
                                   : FingerprintMsg::kErrorUnableToProcess);
@@ -199,7 +201,7 @@ int OpticalCore::authenticateDown() {
 
     if (mNotify != nullptr) {
         if (fingerId > 0) {
-            mNotify->notifyAuthResult(static_cast<uint32_t>(fingerId), mGroupId);
+            mNotify->notifyAuthResult(static_cast<uint32_t>(fingerId), mGroupId, token);
         } else {
             mNotify->checkAcquiredInfo(result);
         }

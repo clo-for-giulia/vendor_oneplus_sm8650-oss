@@ -63,9 +63,6 @@ enum class TaCmd : uint32_t {
     EnrollFinish = 0x836,       // 2102
 };
 
-// Size of the serialized auth token TaCmd::Enroll carries at offset 0x35.
-constexpr size_t kTaAuthTokenSize = 0x45;
-
 // Result codes returned by the TA in the capture response.
 enum class TaResult : int32_t {
     NeedRetry = 0x13ed,

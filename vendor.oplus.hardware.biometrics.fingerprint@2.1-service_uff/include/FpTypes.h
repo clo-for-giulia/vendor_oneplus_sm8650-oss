@@ -11,11 +11,17 @@
  * recovered from the vendor service (see README.md).
  */
 
+#include <cstddef>
 #include <cstdint>
 #include <string_view>
 
 namespace android {
 namespace fingerprint {
+
+// Packed hw_auth_token_t the TA returns: version, challenge, user id,
+// authenticator id, authenticator type, timestamp, HMAC (68 bytes plus the
+// leading version byte).
+constexpr size_t kHwAuthTokenSize = 69;
 
 // ---------------------------------------------------------------------------
 // Trusted-application identities

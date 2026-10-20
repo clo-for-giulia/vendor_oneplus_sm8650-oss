@@ -8,6 +8,7 @@
 
 #include "FpTypes.h"
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <utility>
@@ -37,6 +38,7 @@ struct FingerprintMsg {
     uint32_t fid = 0;
     int32_t acquired = 0;  // acquired-info / error code
     int32_t remaining = 0;
+    std::array<uint8_t, kHwAuthTokenSize> token = {};
 };
 
 // Translates TA results into FingerprintMsg events and hands them to the
@@ -50,7 +52,8 @@ class FingerprintNotify {
     void setNotify(Callback callback) { mCallback = std::move(callback); }
 
     void notifyEnrollResult(uint32_t fid, uint32_t gid, int32_t remaining);
-    void notifyAuthResult(uint32_t fid, uint32_t gid);
+    void notifyAuthResult(uint32_t fid, uint32_t gid,
+                          const std::array<uint8_t, kHwAuthTokenSize>& token);
     // Reports a touch from the keyguard's interaction-detect mode.
     void notifyInteractionDetected();
     void notifyRemove(uint32_t gid, uint32_t fid, uint32_t remaining);

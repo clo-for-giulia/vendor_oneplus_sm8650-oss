@@ -23,6 +23,7 @@
 using aidl::android::hardware::biometrics::fingerprint::AcquiredInfo;
 using aidl::android::hardware::biometrics::fingerprint::Error;
 using aidl::android::hardware::keymaster::HardwareAuthToken;
+using aidl::android::hardware::keymaster::HardwareAuthenticatorType;
 
 namespace android {
 namespace fingerprint {
@@ -32,8 +33,8 @@ namespace {
 // one: a leading zero byte, the identifiers raw, the authenticator type and
 // timestamp byte swapped and the MAC last. Reproduced from the vendor session,
 // which builds the same buffer before sending its enroll command.
-std::array<uint8_t, kTaAuthTokenSize> toTaAuthToken(const HardwareAuthToken& hat) {
-    std::array<uint8_t, kTaAuthTokenSize> token = {};
+std::array<uint8_t, kHwAuthTokenSize> toTaAuthToken(const HardwareAuthToken& hat) {
+    std::array<uint8_t, kHwAuthTokenSize> token = {};
     // token[0x00] stays zero and the MAC tail is zero-padded if short.
     memcpy(token.data() + 0x01, &hat.challenge, sizeof(hat.challenge));
     memcpy(token.data() + 0x09, &hat.userId, sizeof(hat.userId));
@@ -47,6 +48,29 @@ std::array<uint8_t, kTaAuthTokenSize> toTaAuthToken(const HardwareAuthToken& hat
     const size_t macLength = std::min<size_t>(hat.mac.size(), token.size() - 0x25);
     memcpy(token.data() + 0x25, hat.mac.data(), macLength);
     return token;
+}
+
+// The auth result carries the packed hw_auth_token_t the TA generated. A
+// fingerprint token (type 2) is already host ordered; other types are byte
+// swapped, which is what the vendor session applies.
+HardwareAuthToken fromTaAuthToken(const std::array<uint8_t, kHwAuthTokenSize>& raw) {
+    HardwareAuthToken hat = {};
+    memcpy(&hat.challenge, raw.data() + 0x01, sizeof(hat.challenge));
+    memcpy(&hat.userId, raw.data() + 0x09, sizeof(hat.userId));
+    memcpy(&hat.authenticatorId, raw.data() + 0x11, sizeof(hat.authenticatorId));
+    uint32_t authenticatorType = 0;
+    memcpy(&authenticatorType, raw.data() + 0x19, sizeof(authenticatorType));
+    uint64_t timestamp = 0;
+    memcpy(&timestamp, raw.data() + 0x1d, sizeof(timestamp));
+    if (authenticatorType !=
+        static_cast<uint32_t>(HardwareAuthenticatorType::FINGERPRINT)) {
+        authenticatorType = __builtin_bswap32(authenticatorType);
+        timestamp = __builtin_bswap64(timestamp);
+    }
+    hat.authenticatorType = static_cast<HardwareAuthenticatorType>(authenticatorType);
+    hat.timestamp.milliSeconds = static_cast<int64_t>(timestamp);
+    hat.mac.assign(raw.data() + 0x25, raw.data() + 0x25 + 32);
+    return hat;
 }
 
 void mapAcquired(int32_t code, AcquiredInfo* info, int32_t* vendorCode) {
@@ -141,8 +165,8 @@ void BiometricsFpSession::notify(const FingerprintMsg& message) {
             break;
         case FingerprintMsg::kTypeAuthenticated:
             if (message.fid != 0) {
-                HardwareAuthToken token = {};
-                mCallback->onAuthenticationSucceeded(static_cast<int32_t>(message.fid), token);
+                mCallback->onAuthenticationSucceeded(static_cast<int32_t>(message.fid),
+                                                      fromTaAuthToken(message.token));
             } else {
                 mCallback->onAuthenticationFailed();
             }
@@ -304,6 +328,8 @@ ndk::ScopedAStatus BiometricsFpSession::getAuthenticatorId() {
     const int ret = mContext->core()->getAuthenticatorId(&id);
     if (ret != 0) {
         LOG(ERROR) << "BiometricsFpSession: authenticator id query failed: " << ret;
+    } else {
+        mAuthenticatorId = static_cast<int64_t>(id);
     }
     if (mCallback != nullptr) {
         mCallback->onAuthenticatorIdRetrieved(static_cast<int64_t>(id));
@@ -313,7 +339,9 @@ ndk::ScopedAStatus BiometricsFpSession::getAuthenticatorId() {
 
 ndk::ScopedAStatus BiometricsFpSession::invalidateAuthenticatorId() {
     if (mCallback != nullptr) {
-        mCallback->onAuthenticatorIdInvalidated(0);
+        // The vendor reports the current id back; the framework records it for
+        // Keystore, so a hardcoded zero would desynchronize its map.
+        mCallback->onAuthenticatorIdInvalidated(mAuthenticatorId);
     }
     return ndk::ScopedAStatus::ok();
 }

@@ -38,11 +38,13 @@ void FingerprintNotify::notifyEnrollResult(uint32_t fid, uint32_t gid, int32_t r
     emit(message);
 }
 
-void FingerprintNotify::notifyAuthResult(uint32_t fid, uint32_t gid) {
+void FingerprintNotify::notifyAuthResult(uint32_t fid, uint32_t gid,
+                                         const std::array<uint8_t, kHwAuthTokenSize>& token) {
     FingerprintMsg message;
     message.type = FingerprintMsg::kTypeAuthenticated;
     message.gid = gid;
     message.fid = fid;
+    message.token = token;
     emit(message);
 }
 

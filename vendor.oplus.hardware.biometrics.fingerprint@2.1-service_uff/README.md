@@ -103,7 +103,7 @@ fields the HAL reads:
 | `GetAuthenticatorId` | 2011 | 0x80 | – | `+0x78` id (u64) |
 | `Authenticate` | 2012 | 0x88 | `+0x30` gid, `+0x38` operation id | – |
 | `AuthenticateStart` | 2013 | 0xa0 | `+0x44` flag, `+0x48` temperature, `+0x58` brightness | – |
-| `AuthCompare` | 2014 | 0xf0 | `+0x30` auth type | `+0x54` result, `+0x80` finger id |
+| `AuthCompare` | 2014 | 0xf0 | `+0x30` auth type | `+0x54` result, `+0x80` finger id, `+0x88` packed `hw_auth_token_t` |
 | `AuthStudy` | 2015 | 0x80 | `+0x50` finger id | – |
 | `AuthFinish` | 2016 | 0x78 | – | – |
 | `RemoveFinger` | 2017 | 0x80 | `+0x30` gid, `+0x34` fid | – |
@@ -305,6 +305,13 @@ arming the touch. Cancelling a session forwards `Cancel` (2019), which aborts
 the operation inside the algorithm; a failed enroll ends the session with
 `EnrollFinish` (2102) and then cancels, a failed authenticate ends with
 `AuthenticateFinish` (2071) — the vendor's failure sequences.
+
+A successful compare returns the packed `hw_auth_token_t` at `+0x88`. The
+session converts it to the AIDL token (a fingerprint token is host ordered,
+other types are byte swapped) and hands it to the framework, which Keystore
+needs for strong, key-bound app authentication. `invalidateAuthenticatorId`
+reports the last id read by `GetAuthenticatorId`, as the vendor does, instead
+of zero, so the framework's authenticator-id map stays in sync.
 
 Touch down and touch up stay inside the HAL: the vendor's service reports them
 with its own `FingerprintNotify::notifyTouch`, but the AIDL v3 session callback

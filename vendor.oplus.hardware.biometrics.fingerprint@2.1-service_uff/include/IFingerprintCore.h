@@ -58,7 +58,7 @@ class IFingerprintCore {
     // Opens the enroll session in the TA, carrying the framework's auth token.
     // The algorithm stays out of enroll mode until this is sent, and rejects
     // every touch until it is.
-    int enroll(const std::array<uint8_t, kTaAuthTokenSize>& token, uint32_t groupId);
+    int enroll(const std::array<uint8_t, kHwAuthTokenSize>& token, uint32_t groupId);
     int setEnrollTemperature(int32_t temperature);
     int enrollImage(int32_t* acquiredInfo, uint32_t* fid, int32_t* remaining);
     int enrollSaveTemplate();
@@ -73,7 +73,9 @@ class IFingerprintCore {
     // Opens the authenticate session in the TA for `operationId`.
     int authenticate(uint64_t operationId, uint32_t groupId);
     int authenticateStart(int32_t* result);
-    int authenticateCompare(uint32_t authType, int32_t* fingerId, int32_t* result);
+    // On success, `token` receives the packed hw_auth_token_t the TA returns.
+    int authenticateCompare(uint32_t authType, int32_t* fingerId, int32_t* result,
+                            std::array<uint8_t, kHwAuthTokenSize>* token = nullptr);
     int authenticateStudy(uint32_t fingerId);
     int authenticateFinish();
     int enumerate(std::vector<uint32_t>* fingerIds);

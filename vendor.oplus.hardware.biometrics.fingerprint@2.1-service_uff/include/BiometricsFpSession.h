@@ -99,6 +99,7 @@ class BiometricsFpSession
     std::shared_ptr<ISessionCallback> mCallback;
     std::mutex mMutex;
     int64_t mChallenge = 0;
+    int64_t mAuthenticatorId = 0;
     bool mClosed = false;
     bool mIgnoreDisplayTouches = false;
 };

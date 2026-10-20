@@ -159,7 +159,7 @@ int IFingerprintCore::preEnroll() {
     return sendTa(request);
 }
 
-int IFingerprintCore::enroll(const std::array<uint8_t, kTaAuthTokenSize>& token, uint32_t groupId) {
+int IFingerprintCore::enroll(const std::array<uint8_t, kHwAuthTokenSize>& token, uint32_t groupId) {
     auto request = makeRequest(TaCmd::Enroll, 0xc8);
     writeU32(request, 0x30, groupId);
     memcpy(request.data() + 0x35, token.data(), token.size());
@@ -299,7 +299,8 @@ int IFingerprintCore::authenticateStart(int32_t* result) {
     return ret;
 }
 
-int IFingerprintCore::authenticateCompare(uint32_t authType, int32_t* fingerId, int32_t* result) {
+int IFingerprintCore::authenticateCompare(uint32_t authType, int32_t* fingerId, int32_t* result,
+                                          std::array<uint8_t, kHwAuthTokenSize>* token) {
     auto request = makeRequest(TaCmd::AuthCompare, 0xf0);
     writeU32(request, 0x30, authType);
     const int ret = sendTa(request);
@@ -308,6 +309,11 @@ int IFingerprintCore::authenticateCompare(uint32_t authType, int32_t* fingerId, 
     }
     if (result != nullptr) {
         *result = readI32(request, 0x54);
+    }
+    if (ret == 0 && token != nullptr && 0x88 + token->size() <= request.size()) {
+        // The TA appends the packed hw_auth_token_t after the result fields;
+        // the vendor's authenticateCompare copies the same block (offset 0x88).
+        memcpy(token->data(), request.data() + 0x88, token->size());
     }
     return ret;
 }
