@@ -23,6 +23,11 @@ class FingerprintCommon {
     // Signals the UI-ready wait.
     void postUiready();
 
+    // Wakes a pending waitUiready and makes it fail. Used when an operation is
+    // cancelled or the HAL is shutting down, so a capture waiting for the UI
+    // does not keep the worker busy.
+    void cancelUiready();
+
   private:
     std::mutex mMutex;
     std::condition_variable mCond;

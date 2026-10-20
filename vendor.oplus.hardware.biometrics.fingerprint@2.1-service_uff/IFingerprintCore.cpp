@@ -386,6 +386,11 @@ int IFingerprintCore::remove(uint32_t groupId, uint32_t fingerId) {
 }
 
 int IFingerprintCore::setWorkMode(WorkMode mode) {
+    // Arming an operation clears the previous cancellation; leaving the mode
+    // keeps it, so a cancel that lands before the touch still stops the worker.
+    if (mode != WorkMode::Idle) {
+        mCancelled = false;
+    }
     mWorkMode = mode;
     return 0;
 }

@@ -51,9 +51,9 @@ int HalContext::selectChip() {
 void HalContext::onDeviceEvent(const driver::FingerprintMessage& message) {
     switch (message.event) {
         case driver::kEventTpTouchdown:
-            if (mCore != nullptr) {
-                mCore->doTouchDownEvent();
-            }
+            // The capture can block on TA commands and on UI_READY; keep it off
+            // the reader so UI_READY, touch-up and screen events still flow.
+            postTouchDown();
             break;
         case driver::kEventTpTouchup:
             if (mCore != nullptr) {
@@ -68,6 +68,79 @@ void HalContext::onDeviceEvent(const driver::FingerprintMessage& message) {
         default:
             break;
     }
+}
+
+void HalContext::startWorkThread() {
+    if (mWorkThread.joinable()) {
+        return;
+    }
+    {
+        std::lock_guard<std::mutex> lock(mWorkMutex);
+        mWorkRunning = true;
+        mTouchPending = false;
+        mWorkActive = false;
+    }
+    mWorkThread = std::thread(&HalContext::workThreadLoop, this);
+}
+
+void HalContext::stopWorkThread() {
+    {
+        std::lock_guard<std::mutex> lock(mWorkMutex);
+        mWorkRunning = false;
+    }
+    mWorkCond.notify_all();
+    if (mWorkThread.joinable()) {
+        mWorkThread.join();
+    }
+    std::lock_guard<std::mutex> lock(mWorkMutex);
+    mTouchPending = false;
+    mWorkActive = false;
+}
+
+void HalContext::postTouchDown() {
+    {
+        std::lock_guard<std::mutex> lock(mWorkMutex);
+        // Drop a second down while one is queued or running; the framework is
+        // not ready for it and the vendor drops these too.
+        if (!mWorkRunning || mTouchPending) {
+            return;
+        }
+        mTouchPending = true;
+    }
+    mWorkCond.notify_one();
+}
+
+void HalContext::workThreadLoop() {
+    for (;;) {
+        {
+            std::unique_lock<std::mutex> lock(mWorkMutex);
+            mWorkCond.wait(lock, [this] { return !mWorkRunning || mTouchPending; });
+            if (!mWorkRunning) {
+                break;
+            }
+            mWorkActive = true;
+        }
+        if (mCore != nullptr) {
+            mCore->doTouchDownEvent();
+        }
+        {
+            std::lock_guard<std::mutex> lock(mWorkMutex);
+            mTouchPending = false;
+            mWorkActive = false;
+        }
+        mWorkDoneCond.notify_all();
+    }
+}
+
+void HalContext::waitForWorkIdle() {
+    std::unique_lock<std::mutex> lock(mWorkMutex);
+    // The cancellation paths call this after setting the work mode to Idle: a
+    // touch that was queued but has not started must not run for the next
+    // operation. A touch already in flight is waited for.
+    if (!mWorkActive) {
+        mTouchPending = false;
+    }
+    mWorkDoneCond.wait(lock, [this] { return !mWorkActive; });
 }
 
 int HalContext::init() {
@@ -123,6 +196,11 @@ int HalContext::init() {
         return -1;
     }
 
+    // Started after the interrupts are armed and the core is initialized; a
+    // touch that arrives in this last instant is dropped by postTouchDown()
+    // rather than dispatched without a core.
+    startWorkThread();
+
     mInitialized = true;
     LOG(INFO) << "HalContext: initialised (TA=" << taNameToString(mTaName) << ")";
     return 0;
@@ -133,6 +211,20 @@ int HalContext::deinit() {
         mDevice->setIrqEnabled(false);
         mDevice->setIntr3Enabled(false);
         mDevice->stopEventLoop();
+    }
+
+    // Abort whatever the worker is running and wake it if it is waiting for the
+    // UI, then wait for it to leave the core before tearing the rest down.
+    if (mCore != nullptr) {
+        mCore->setWorkMode(WorkMode::Idle);
+        mCore->cancel();
+    }
+    if (mCommon != nullptr) {
+        mCommon->cancelUiready();
+    }
+    stopWorkThread();
+
+    if (mDevice != nullptr) {
         mDevice->close();
     }
     if (mCa != nullptr) {

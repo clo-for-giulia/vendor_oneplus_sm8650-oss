@@ -270,14 +270,15 @@ touch coordinates land in `out_buf`. Events the optical path uses:
 `TP_TOUCHDOWN=4`, `TP_TOUCHUP=5`, `UI_READY=6`. The reader blocks on the
 socket plus an eventfd, which teardown signals to break it out of the wait.
 
-Touch flow: kernel `TP_TOUCHDOWN` → `HalContext::onDeviceEvent` →
-`IFingerprintCore::doTouchDownEvent` → `OpticalCore::authenticateDown` /
-`enrollDown` → `captureImg`. In the keyguard's interaction-detect mode the
-touch only reports `onInteractionDetected` and lets the framework start the
-real authentication, which is what the vendor does with work mode 17.
-`UI_READY` posts the UI-ready semaphore that
-`authenticateDown` (1000 ms) / `enrollDown` (500 ms) wait on. `enrollDown`
-first re-reads the panel temperature from the driver
+Touch flow: kernel `TP_TOUCHDOWN` → `HalContext::onDeviceEvent` → the touch
+worker (the vendor's EventThd/WorkThd split) → `IFingerprintCore::doTouchDownEvent`
+→ `OpticalCore::authenticateDown` / `enrollDown` → `captureImg`. The worker
+waits for `UI_READY` (posted by the reader) for up to 1000/500 ms; keeping the
+capture off the reader is what lets that event arrive while it waits. In the
+keyguard's interaction-detect mode the touch only reports
+`onInteractionDetected` and lets the framework start the real authentication,
+which is what the vendor does with work mode 17. `enrollDown` first re-reads
+the panel temperature from the driver
 (`FP_IOC_LHBM_TEMPERATURE`) and forwards it with `EnrollTemperature` (2007),
 which is what the vendor sends before every enroll capture; the authenticate
 start carries the panel's maximum brightness, read from
@@ -332,12 +333,14 @@ among the pieces not reimplemented.
 An operation ends where the framework says it does: when it cancels the
 cancellation signal it was handed — screen off, a higher-priority client,
 dismissal — and it never closes the session in between, so the session drops
-the work mode and the touch routing there, aborts the operation in the TA, and
-then reports CANCELED. The framework's clients only finish on that error;
-without it the scheduler keeps the old operation current until its watchdog,
-and the next screen-on operation — which is what asks SystemUI for the UDFPS
-overlay — starts late. Without dropping the mode and routing, touches in any
-app afterwards would still run the last operation.
+the work mode, aborts the operation in the TA, wakes the worker if it is
+waiting for the UI, and waits for that worker to finish before it reports
+CANCELED. The framework's clients only finish on that error; without it the
+scheduler keeps the old operation current until its watchdog, and the next
+screen-on operation — which is what asks SystemUI for the UDFPS overlay —
+starts late. Waiting for the worker before the acknowledgement also keeps the
+next operation from starting while the aborted one is still cleaning up in
+the TA.
 
 No session call surfaces a TA failure as a service-specific error: the
 framework's clients only catch `RemoteException`, so an error thrown from, for

@@ -78,7 +78,6 @@ int OpticalCore::enrollDown() {
     if (mContext == nullptr || mContext->device() == nullptr) {
         return -1;
     }
-    mCancelled = false;
     mContext->device()->setGpioResetValue(1);
 
     refreshTemperature();
@@ -89,6 +88,11 @@ int OpticalCore::enrollDown() {
 
     if (mContext->common() != nullptr) {
         mContext->common()->waitUiready(kEnrollUireadyTimeoutMs);
+        // A cancel wakes the wait so this worker can abort its TA state before
+        // the cancellation signal acknowledges the framework.
+        if (isCancelled()) {
+            return abortEnroll(-1);
+        }
     }
     delayAfterUiready();
 
@@ -153,7 +157,6 @@ int OpticalCore::authenticateDown() {
     if (mContext == nullptr || mContext->device() == nullptr) {
         return -1;
     }
-    mCancelled = false;
     mContext->device()->setGpioResetValue(1);
 
     const int startRet = authenticateStart();
@@ -163,6 +166,9 @@ int OpticalCore::authenticateDown() {
 
     if (mContext->common() != nullptr) {
         mContext->common()->waitUiready(kAuthUireadyTimeoutMs);
+        if (isCancelled()) {
+            return abortAuth(-1);
+        }
     }
     delayAfterUiready();
 

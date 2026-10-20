@@ -37,5 +37,14 @@ void FingerprintCommon::postUiready() {
     mCond.notify_all();
 }
 
+void FingerprintCommon::cancelUiready() {
+    {
+        std::lock_guard<std::mutex> lock(mMutex);
+        mUireadyPosted = false;
+        mUireadyCancelled = true;
+    }
+    mCond.notify_all();
+}
+
 }  // namespace fingerprint
 }  // namespace android

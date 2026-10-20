@@ -133,13 +133,17 @@ BiometricsFpSession::makeCancellationSignal() {
         // The framework cancels the operation's signal when it aborts the
         // operation — screen off, a higher-priority client, dismissal — and
         // never closes the session in between, so this is where the operation
-        // ends. Release the work mode and the routing, abort the operation in
-        // the TA, then acknowledge the cancellation: the framework's client
-        // only finishes on that error, and without it the next operation (and
-        // the overlay it shows) waits for the scheduler's watchdog.
+        // ends. Release the work mode, abort the operation in the TA, wake the
+        // worker if it is waiting for UI_READY, and let it finish its cleanup
+        // before acknowledging: the framework's client finishes on this error
+        // and may start the next operation immediately.
         mContext->core()->setWorkMode(WorkMode::Idle);
-        setTouchRouting(false);
         mContext->core()->cancel();
+        if (mContext->common() != nullptr) {
+            mContext->common()->cancelUiready();
+        }
+        setTouchRouting(false);
+        mContext->waitForWorkIdle();
         if (mCallback != nullptr) {
             mCallback->onError(Error::CANCELED, 0);
         }
@@ -194,7 +198,7 @@ void BiometricsFpSession::dispatchTouch(bool down) {
         return;
     }
     if (down) {
-        mContext->core()->doTouchDownEvent();
+        mContext->postTouchDown();
     } else {
         mContext->core()->doTouchUpEvent();
     }
@@ -356,16 +360,25 @@ ndk::ScopedAStatus BiometricsFpSession::close() {
         return ndk::ScopedAStatus::ok();
     }
     mClosed = true;
-    setTouchRouting(false);
     if (mContext != nullptr && mContext->core() != nullptr) {
-        // Drops the session's work mode, so touches arriving after it do nothing,
-        // then aborts any operation still open in the TA. The vendor posts the
-        // same cancel before it reports the session closed; without it a user
-        // switch can leave the next session's first command in a stale state.
+        // Drops the session's work mode, so touches arriving after it do
+        // nothing, then aborts any operation still open in the TA. The vendor
+        // posts the same cancel before it reports the session closed; without
+        // it a user switch can leave the next session's first command in a
+        // stale state.
         mContext->core()->setWorkMode(WorkMode::Idle);
         mContext->core()->cancel();
     }
+    if (mContext != nullptr && mContext->common() != nullptr) {
+        mContext->common()->cancelUiready();
+    }
+    setTouchRouting(false);
+    if (mContext != nullptr) {
+        // Do not let the next session run while this one is still unwinding.
+        mContext->waitForWorkIdle();
+    }
     if (mContext != nullptr && mContext->notify() != nullptr) {
+        // The worker has finished; detach it before the session closes.
         mContext->notify()->setNotify(nullptr);
     }
     if (mCallback != nullptr) {

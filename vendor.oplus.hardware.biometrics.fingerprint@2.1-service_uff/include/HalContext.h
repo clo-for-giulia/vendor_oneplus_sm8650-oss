@@ -9,7 +9,10 @@
 #include "FingerprintDriverAbi.h"
 #include "FpTypes.h"
 
+#include <condition_variable>
 #include <memory>
+#include <mutex>
+#include <thread>
 
 namespace android {
 namespace fingerprint {
@@ -34,6 +37,15 @@ class HalContext {
     int init();
     int deinit();
 
+    // Waits until the touch worker is not running an operation. The
+    // cancellation path uses it so the next operation cannot start before the
+    // aborted one has finished its TA cleanup.
+    void waitForWorkIdle();
+
+    // Hands a display touch to the operation worker. The driver reader and the
+    // AIDL pointer path both come through here.
+    void postTouchDown();
+
     FpCa* ca() const { return mCa.get(); }
     Device* device() const { return mDevice.get(); }
     FingerprintCommon* common() const { return mCommon.get(); }
@@ -48,6 +60,13 @@ class HalContext {
     int selectChip();
     void onDeviceEvent(const driver::FingerprintMessage& message);
 
+    // The driver reader hands touch-downs to this thread, so a capture that
+    // waits for UI_READY cannot block the thread that delivers it. UI_READY and
+    // touch-up stay on the reader (the vendor's EventThd/WorkThd split).
+    void startWorkThread();
+    void stopWorkThread();
+    void workThreadLoop();
+
     std::unique_ptr<FpCa> mCa;
     std::unique_ptr<Device> mDevice;
     std::unique_ptr<FingerprintCommon> mCommon;
@@ -57,6 +76,14 @@ class HalContext {
 
     TaName mTaName = TaName::UffGx;
     bool mInitialized = false;
+
+    std::thread mWorkThread;
+    std::mutex mWorkMutex;
+    std::condition_variable mWorkCond;
+    std::condition_variable mWorkDoneCond;
+    bool mWorkRunning = false;
+    bool mTouchPending = false;
+    bool mWorkActive = false;
 };
 
 }  // namespace fingerprint
