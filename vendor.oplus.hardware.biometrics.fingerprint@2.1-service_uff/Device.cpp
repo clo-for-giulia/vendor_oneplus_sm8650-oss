@@ -82,6 +82,13 @@ int Device::close() {
         ::close(mFd);
         mFd = -1;
     }
+    {
+        std::lock_guard<std::mutex> lock(mTpMutex);
+        if (mTpFd >= 0) {
+            ::close(mTpFd);
+            mTpFd = -1;
+        }
+    }
     return 0;
 }
 
@@ -155,20 +162,27 @@ int Device::setTpEnabled(bool enable) {
     // The panel is switched by writing the touch driver's node; when that node
     // is not reachable from here, the touch service performs the same write.
     int ret = -1;
-    const int fd = ::open(kTpPath, O_WRONLY | O_CLOEXEC);
-    if (fd >= 0) {
-        char value[4] = {};
-        const int length = snprintf(value, sizeof(value), "%d", enable ? 1 : 0);
-        if (length > 0 && ::write(fd, value, kTpValueSize) == static_cast<ssize_t>(kTpValueSize)) {
-            ret = 0;
-        } else {
-            LOG(WARNING) << "Device: cannot set " << kTpPath << ": " << strerror(errno);
+    {
+        std::lock_guard<std::mutex> lock(mTpMutex);
+        if (mTpFd < 0) {
+            mTpFd = ::open(kTpPath, O_WRONLY | O_CLOEXEC);
         }
-        ::close(fd);
-    } else {
-        LOG(INFO) << "Device: " << kTpPath << " is not reachable (" << strerror(errno)
-                  << "), routing through the touch service";
-        ret = TouchAidl::instance().writeNode(kTpNodeFlag, enable ? 1 : 0);
+        if (mTpFd >= 0) {
+            char value[4] = {};
+            const int length = snprintf(value, sizeof(value), "%d", enable ? 1 : 0);
+            if (length > 0 &&
+                ::write(mTpFd, value, kTpValueSize) == static_cast<ssize_t>(kTpValueSize)) {
+                ret = 0;
+            } else {
+                LOG(WARNING) << "Device: cannot set " << kTpPath << ": " << strerror(errno);
+                ::close(mTpFd);
+                mTpFd = -1;
+            }
+        } else {
+            LOG(INFO) << "Device: " << kTpPath << " is not reachable (" << strerror(errno)
+                      << "), routing through the touch service";
+            ret = TouchAidl::instance().writeNode(kTpNodeFlag, enable ? 1 : 0);
+        }
     }
 
     holdWakeLock(false);

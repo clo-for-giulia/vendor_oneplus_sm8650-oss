@@ -11,6 +11,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <mutex>
 #include <thread>
 
 namespace android {
@@ -69,6 +70,10 @@ class Device {
 
     int mFd = -1;
     int mWakeFd = -1;
+    // Kept open across operations; the node may be unavailable, in which case
+    // the write goes through the touch service.
+    int mTpFd = -1;
+    std::mutex mTpMutex;
     std::atomic<bool> mRunning = false;
     std::thread mEventThread;
     EventCallback mCallback;
