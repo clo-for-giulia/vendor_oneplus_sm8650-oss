@@ -262,6 +262,10 @@ int IFingerprintCore::authenticate(uint64_t operationId, uint32_t groupId) {
     return sendTa(request);
 }
 
+int IFingerprintCore::prepareAuthenticate() {
+    return 0;
+}
+
 int IFingerprintCore::authenticateStart(int32_t* result) {
     auto request = makeRequest(TaCmd::AuthenticateStart, 0xa0);
     // Offsets recovered from the disassembly: +0x44 flag, +0x48 temperature,

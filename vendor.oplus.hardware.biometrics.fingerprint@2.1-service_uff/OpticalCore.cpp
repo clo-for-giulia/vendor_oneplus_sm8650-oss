@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include <array>
+#include <chrono>
 #include <vector>
 
 namespace android {
@@ -25,6 +26,10 @@ namespace {
 constexpr int kAuthUireadyTimeoutMs = 1000;
 constexpr int kEnrollUireadyTimeoutMs = 500;
 constexpr int kMaxCaptureRetries = 3;
+// A pre-armed AuthenticateStart is only reused for an imminent touch. If the
+// framework starts authentication early and the finger arrives much later, send
+// the command again from the touch path so the TA is not left with stale state.
+constexpr int64_t kAuthPrearmMaxAgeNs = 1'000'000'000;
 }  // namespace
 
 OpticalCore::OpticalCore(HalContext* context) : IFingerprintCore(context) {}
@@ -152,6 +157,26 @@ int OpticalCore::enrollDown() {
     return 0;
 }
 
+int OpticalCore::prepareAuthenticate() {
+    if (mContext == nullptr || mContext->device() == nullptr) {
+        return -1;
+    }
+    // AOSP starts the authentication operation before the finger arrives. The
+    // TA start command only carries the temperature and panel brightness, so
+    // send it here and keep it off the touch path. A failure is retried by
+    // authenticateDown() when the touch actually arrives.
+    mAuthPrepared = false;
+    refreshTemperature();
+    int32_t result = 0;
+    const int ret = IFingerprintCore::authenticateStart(&result);
+    if (ret == 0) {
+        mAuthPreparedAtNs = static_cast<int64_t>(
+                std::chrono::steady_clock::now().time_since_epoch().count());
+        mAuthPrepared = true;
+    }
+    return ret;
+}
+
 int OpticalCore::authenticateStart() {
     refreshTemperature();
     int32_t result = 0;
@@ -164,7 +189,13 @@ int OpticalCore::authenticateDown() {
     }
     mContext->device()->setGpioResetValue(1);
 
-    const int startRet = authenticateStart();
+    bool prepared = mAuthPrepared.exchange(false);
+    if (prepared) {
+        const int64_t now = static_cast<int64_t>(
+                std::chrono::steady_clock::now().time_since_epoch().count());
+        prepared = now - mAuthPreparedAtNs.load() <= kAuthPrearmMaxAgeNs;
+    }
+    const int startRet = prepared ? 0 : authenticateStart();
     if (startRet != 0) {
         return abortAuth(startRet);
     }

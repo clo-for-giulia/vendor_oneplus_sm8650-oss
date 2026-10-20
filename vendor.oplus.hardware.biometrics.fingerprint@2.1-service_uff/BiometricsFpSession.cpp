@@ -265,6 +265,10 @@ ndk::ScopedAStatus BiometricsFpSession::authenticate(int64_t operationId,
     IFingerprintCore* core = mContext->core();
     core->authenticate(static_cast<uint64_t>(operationId), static_cast<uint32_t>(mUserId));
     core->setWorkMode(WorkMode::Authenticate);
+    // AOSP has already started authentication when the finger arrives. Give
+    // the TA its start command now; the touch path sends it as a fallback if
+    // this did not run.
+    core->prepareAuthenticate();
     setTouchRouting(true);
     if (out != nullptr) {
         *out = makeCancellationSignal();

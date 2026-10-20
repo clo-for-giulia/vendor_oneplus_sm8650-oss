@@ -8,6 +8,9 @@
 
 #include "IFingerprintCore.h"
 
+#include <atomic>
+#include <cstdint>
+
 namespace android {
 namespace fingerprint {
 
@@ -20,6 +23,7 @@ class OpticalCore : public IFingerprintCore {
 
     int init() override;
     int enrollDown() override;
+    int prepareAuthenticate() override;
     int authenticateDown() override;
 
   private:
@@ -32,6 +36,12 @@ class OpticalCore : public IFingerprintCore {
     // the TA, so the algorithm is not left mid-operation.
     int abortEnroll(int ret);
     int abortAuth(int ret);
+
+    // Set when AuthenticateStart has already been sent for the current
+    // authentication. Consumed by the touch worker, which falls back to
+    // sending it if the pre-arm did not run, failed or is stale.
+    std::atomic<bool> mAuthPrepared{false};
+    std::atomic<int64_t> mAuthPreparedAtNs{0};
 };
 
 }  // namespace fingerprint

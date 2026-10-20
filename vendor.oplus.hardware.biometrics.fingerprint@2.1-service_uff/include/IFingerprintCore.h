@@ -66,6 +66,10 @@ class IFingerprintCore {
     int transTouchUpStatusAndFinish(int32_t* retry);
     // Opens the authenticate session in the TA for `operationId`.
     int authenticate(uint64_t operationId, uint32_t groupId);
+    // Runs the sensor-specific setup that can happen before a touch. The
+    // optical core uses it to start the TA authentication, so the touch path
+    // only has to capture; if this did not run, the touch path starts it.
+    virtual int prepareAuthenticate();
     int authenticateStart(int32_t* result);
     // On success, `token` receives the packed hw_auth_token_t the TA returns.
     int authenticateCompare(uint32_t authType, int32_t* fingerId, int32_t* result,

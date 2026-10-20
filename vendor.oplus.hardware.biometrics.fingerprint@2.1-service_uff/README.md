@@ -308,9 +308,12 @@ zero byte, identifiers raw, authenticator type and timestamp byte swapped,
 MAC last; `Enroll` is also what puts the algorithm into enroll mode — without
 it every touch is rejected with "invalid mode 0").
 `Authenticate` (2012) opens the authenticate session the same way with the
-operation id. Both mirror the vendor sessions, which send exactly these before
-arming the touch. Cancelling a session forwards `Cancel` (2019), which aborts
-the operation inside the algorithm; a failed enroll ends the session with
+operation id. The optical core also sends `AuthenticateStart` (2013) when the
+framework starts authentication, because AOSP requests authentication before
+the finger arrives. The touch path only has to capture; if the pre-arm failed,
+or the touch arrives after the short pre-arm window, it sends `AuthenticateStart`
+itself. Cancelling a session forwards `Cancel` (2019), which aborts the
+operation inside the algorithm; a failed enroll ends the session with
 `EnrollFinish` (2102) and then cancels, a failed authenticate ends with
 `AuthenticateFinish` (2071) — the vendor's failure sequences.
 
