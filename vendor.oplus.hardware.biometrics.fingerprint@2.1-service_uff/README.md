@@ -274,10 +274,13 @@ worker (the vendor's EventThd/WorkThd split) → `IFingerprintCore::doTouchDownE
 → `OpticalCore::authenticateDown` / `enrollDown` → `captureImg`. A new
 touch-down drops any UI-ready post left by screen-off, wake or the previous
 operation, so the capture cannot consume an overlay event that does not belong
-to it. The worker then waits for `UI_READY` (posted by the reader) for up to
-1000/500 ms; keeping the capture off the reader is what lets that event arrive
-while it waits. A timeout or cancel aborts the operation instead of capturing
-outside the overlay window. In the
+to it. The worker then waits for the panel driver's `UI_READY` event (posted by
+the reader) for up to 1000/500 ms; keeping the capture off the reader is what
+lets that event arrive while it waits. This event is the capture gate because
+it reports that the pressed icon and HBM are scanning. The framework's
+`onUiReady` callback only says that its overlay view is configured, so it does
+not post the latch. A timeout or cancel aborts the operation instead of
+capturing outside the overlay window. In the
 keyguard's interaction-detect mode the touch only reports
 `onInteractionDetected` and lets the framework start the real authentication,
 which is what the vendor does with work mode 17. `enrollDown` first re-reads

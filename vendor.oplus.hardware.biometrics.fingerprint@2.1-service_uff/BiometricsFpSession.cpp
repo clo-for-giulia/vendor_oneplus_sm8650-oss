@@ -409,9 +409,11 @@ ndk::ScopedAStatus BiometricsFpSession::onPointerUp(int32_t pointerId) {
 }
 
 ndk::ScopedAStatus BiometricsFpSession::onUiReady() {
-    if (mContext != nullptr && mContext->common() != nullptr) {
-        mContext->common()->postUiready();
-    }
+    // The framework reports that its overlay view is configured. Optical
+    // capture is gated on the panel driver's UI_READY event instead, which is
+    // the point where the pressed icon and HBM are actually scanning. Treating
+    // the framework callback as equivalent starts the first capture before the
+    // panel has settled.
     return ndk::ScopedAStatus::ok();
 }
 
