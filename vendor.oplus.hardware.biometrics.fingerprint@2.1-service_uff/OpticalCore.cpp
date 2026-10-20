@@ -34,9 +34,12 @@ int OpticalCore::init() {
 }
 
 void OpticalCore::delayAfterUiready() {
-    // Short settle delay after the framework reports the UI ready, as the
-    // vendor waits before the first capture.
-    usleep(1000);
+    // The vendor waits 15 ms after UI_READY before the first capture. Its
+    // refresh-rate command is not sent by the AOSP framework, so the prebuilt
+    // uses this default here as well. Starting 1 ms after UI_READY captures
+    // before the overlay and panel dim layer have settled, which drops the
+    // first screen-off press.
+    usleep(15 * 1000);
 }
 
 void OpticalCore::refreshTemperature() {
