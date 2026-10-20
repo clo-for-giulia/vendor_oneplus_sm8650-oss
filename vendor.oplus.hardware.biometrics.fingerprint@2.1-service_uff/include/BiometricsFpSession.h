@@ -89,8 +89,8 @@ class BiometricsFpSession
     // touch is what would trigger it otherwise.
     void setTouchRouting(bool enable);
     // Binds this session's user database in the TA. One TA is shared by every
-    // user's session, so this runs when the session is created and again before
-    // each data-touching command.
+    // user's session, so this runs when the session is created; the framework
+    // serializes sessions, as the vendor's createSession does.
     int bindGroup();
 
     HalContext* mContext = nullptr;

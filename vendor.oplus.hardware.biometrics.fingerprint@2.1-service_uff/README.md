@@ -210,10 +210,11 @@ framing and sets `cmd_len` (`0x130`) itself. Gated by TA config selector `0x66`.
 with cmd `0x15` (module 5) in 1 MB chunks. It then binds group 0
 (`SetActiveGroup` 2002 with `/data/vendor_de/0/fpdata`) as the initial group.
 Each session binds its own user's directory (`/data/vendor_de/<userId>/fpdata`)
-when it is created — the point where the vendor's `createSession` binds it —
-and the commands that touch data bind again before running, because one TA
-serves every user: without that, a work-profile session would read and delete
-the primary user's templates. The framework reconciles its own records against
+when it is created — the point where the vendor's `createSession` binds it.
+One TA serves every user and the framework keeps a single active session per
+sensor, replacing it on a user switch, so no later command has to rebind:
+without the bind, a work-profile session would read and delete the primary
+user's templates. The framework reconciles its own records against
 that list and removes templates it does not know, which is how enrollments
 left behind by another ROM are cleaned up.
 

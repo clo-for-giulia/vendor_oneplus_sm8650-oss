@@ -115,8 +115,9 @@ int BiometricsFpSession::init() {
         mContext->notify()->setNotify([this](const FingerprintMsg& message) { notify(message); });
     }
     // One TA serves every user's session, so bind this session's store here,
-    // at the point the vendor's createSession binds it. A failure is not fatal:
-    // the commands that touch data bind again before running.
+    // at the point the vendor's createSession binds it. The framework keeps a
+    // single active session per sensor and replaces it on a user switch, so no
+    // later command has to rebind.
     if (bindGroup() != 0) {
         LOG(WARNING) << "BiometricsFpSession: cannot bind the database for user " << mUserId;
     }
@@ -238,7 +239,6 @@ ndk::ScopedAStatus BiometricsFpSession::enroll(const HardwareAuthToken& hat,
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
     }
     IFingerprintCore* core = mContext->core();
-    bindGroup();
     core->preEnroll();
     core->enroll(toTaAuthToken(hat), static_cast<uint32_t>(mUserId));
     core->setWorkMode(WorkMode::Enroll);
@@ -255,7 +255,6 @@ ndk::ScopedAStatus BiometricsFpSession::authenticate(int64_t operationId,
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
     }
     IFingerprintCore* core = mContext->core();
-    bindGroup();
     core->authenticate(static_cast<uint64_t>(operationId), static_cast<uint32_t>(mUserId));
     core->setWorkMode(WorkMode::Authenticate);
     setTouchRouting(true);
@@ -284,7 +283,6 @@ ndk::ScopedAStatus BiometricsFpSession::enumerateEnrollments() {
     if (mContext == nullptr || mContext->core() == nullptr) {
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
     }
-    bindGroup();
     std::vector<uint32_t> fingerIds;
     const int ret = mContext->core()->enumerate(&fingerIds);
     if (ret != 0) {
@@ -309,7 +307,6 @@ ndk::ScopedAStatus BiometricsFpSession::removeEnrollments(
     if (mContext == nullptr || mContext->core() == nullptr) {
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
     }
-    bindGroup();
     for (int32_t id : enrollmentIds) {
         // A failed removal must not surface as an exception: the framework does
         // not catch service-specific errors here and its system server would
@@ -323,7 +320,6 @@ ndk::ScopedAStatus BiometricsFpSession::getAuthenticatorId() {
     if (mContext == nullptr || mContext->core() == nullptr) {
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
     }
-    bindGroup();
     uint64_t id = 0;
     const int ret = mContext->core()->getAuthenticatorId(&id);
     if (ret != 0) {
