@@ -43,17 +43,32 @@ int TouchAidl::writeNode(int32_t nodeFlag, int32_t value) {
         }
     }
 
-    // The vendor only treats a negative result as "unsupported"; zero is a
-    // valid answer.
-    int32_t supported = 0;
-    if (!mTouch->isTouchNodeSupport(kTouchDevice, nodeFlag, &supported).isOk() || supported < 0) {
-        LOG(WARNING) << "TouchAidl: node " << nodeFlag << " unsupported";
+    const auto support = mNodeSupport.find(nodeFlag);
+    if (support == mNodeSupport.end()) {
+        // The vendor only treats a negative result as "unsupported"; zero is a
+        // valid answer. The answer is static for a node, so ask once.
+        int32_t supported = 0;
+        if (!mTouch->isTouchNodeSupport(kTouchDevice, nodeFlag, &supported).isOk()) {
+            LOG(WARNING) << "TouchAidl: node " << nodeFlag << " support query failed";
+            mTouch = nullptr;
+            return -1;
+        }
+        const bool usable = supported >= 0;
+        mNodeSupport.emplace(nodeFlag, usable);
+        if (!usable) {
+            LOG(WARNING) << "TouchAidl: node " << nodeFlag << " unsupported";
+            return -1;
+        }
+    } else if (!support->second) {
         return -1;
     }
 
     int32_t result = 0;
-    if (!mTouch->touchWriteNodeFile(kTouchDevice, nodeFlag, std::to_string(value), &result).isOk()) {
+    if (!mTouch->touchWriteNodeFile(kTouchDevice, nodeFlag, std::to_string(value), &result)
+                 .isOk()) {
         LOG(WARNING) << "TouchAidl: write of " << value << " to node " << nodeFlag << " failed";
+        // The service may have restarted; reconnect on the next write.
+        mTouch = nullptr;
         return -1;
     }
     return 0;

@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <unordered_map>
 
 namespace android {
 namespace fingerprint {
@@ -30,7 +31,9 @@ class TouchAidl {
     TouchAidl& operator=(const TouchAidl&) = delete;
 
     // Writes `value` to the touch node identified by `nodeFlag`. Returns 0 on
-    // success and -1 if the service or the node is unavailable.
+    // success and -1 if the service or the node is unavailable. The support
+    // answer is cached per node; a failed binder call drops the cached service
+    // so the next write reconnects.
     int writeNode(int32_t nodeFlag, int32_t value);
 
   private:
@@ -38,6 +41,7 @@ class TouchAidl {
 
     std::mutex mMutex;
     std::shared_ptr<::aidl::vendor::oplus::hardware::touch::IOplusTouch> mTouch;
+    std::unordered_map<int32_t, bool> mNodeSupport;
 };
 
 }  // namespace fingerprint
