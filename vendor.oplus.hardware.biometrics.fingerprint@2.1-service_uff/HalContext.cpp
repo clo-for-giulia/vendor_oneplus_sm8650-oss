@@ -140,9 +140,9 @@ void HalContext::workThreadLoop() {
 
 void HalContext::waitForWorkIdle() {
     std::unique_lock<std::mutex> lock(mWorkMutex);
-    // The cancellation paths call this after setting the work mode to Idle: a
-    // touch that was queued but has not started must not run for the next
-    // operation. A touch already in flight is waited for.
+    // New session operations call this after setting the work mode: a touch
+    // that was queued but has not started must not run for the next operation.
+    // A touch already in flight is waited for.
     if (!mWorkActive) {
         mTouchPending = false;
     }

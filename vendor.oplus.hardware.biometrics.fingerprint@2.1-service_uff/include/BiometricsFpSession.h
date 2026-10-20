@@ -15,6 +15,7 @@
 #include <aidl/android/hardware/biometrics/fingerprint/PointerContext.h>
 #include <aidl/android/hardware/keymaster/HardwareAuthToken.h>
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -102,6 +103,10 @@ class BiometricsFpSession
     int64_t mAuthenticatorId = 0;
     bool mClosed = false;
     bool mIgnoreDisplayTouches = false;
+    // Cleared when the framework cancels an operation. The worker may still be
+    // unwinding in the TA; late result callbacks from that operation must not
+    // land on the operation the acknowledgement unblocked.
+    std::atomic<bool> mAcceptNotifications{false};
 };
 
 }  // namespace fingerprint

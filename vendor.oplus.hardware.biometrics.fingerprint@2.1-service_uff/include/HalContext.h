@@ -37,9 +37,9 @@ class HalContext {
     int init();
     int deinit();
 
-    // Waits until the touch worker is not running an operation. The
-    // cancellation path uses it so the next operation cannot start before the
-    // aborted one has finished its TA cleanup.
+    // Waits until the touch worker is not running an operation. A new session
+    // operation calls it before touching the TA so its setup cannot race an
+    // operation that is still cleaning up.
     void waitForWorkIdle();
 
     // Hands a display touch to the operation worker. The driver reader and the

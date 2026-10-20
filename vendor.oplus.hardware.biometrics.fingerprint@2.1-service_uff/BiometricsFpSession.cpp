@@ -137,17 +137,18 @@ BiometricsFpSession::makeCancellationSignal() {
         // The framework cancels the operation's signal when it aborts the
         // operation — screen off, a higher-priority client, dismissal — and
         // never closes the session in between, so this is where the operation
-        // ends. Release the work mode, abort the operation in the TA, wake the
-        // worker if it is waiting for UI_READY, and let it finish its cleanup
-        // before acknowledging: the framework's client finishes on this error
-        // and may start the next operation immediately.
+        // ends. Stop accepting results from the operation, abort it in the TA,
+        // wake the worker if it is waiting for UI_READY and release the touch
+        // routing. Acknowledge immediately; the next operation waits for the
+        // worker before it touches the TA, so cleanup does not delay the
+        // framework's screen-off/wake handoff.
+        mAcceptNotifications = false;
         mContext->core()->setWorkMode(WorkMode::Idle);
         mContext->core()->cancel();
         if (mContext->common() != nullptr) {
             mContext->common()->cancelUiready();
         }
         setTouchRouting(false);
-        mContext->waitForWorkIdle();
         if (mCallback != nullptr) {
             mCallback->onError(Error::CANCELED, 0);
         }
@@ -155,7 +156,7 @@ BiometricsFpSession::makeCancellationSignal() {
 }
 
 void BiometricsFpSession::notify(const FingerprintMsg& message) {
-    if (mCallback == nullptr) {
+    if (mCallback == nullptr || !mAcceptNotifications.load()) {
         return;
     }
     switch (message.type) {
@@ -247,6 +248,8 @@ ndk::ScopedAStatus BiometricsFpSession::enroll(const HardwareAuthToken& hat,
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
     }
     IFingerprintCore* core = mContext->core();
+    mContext->waitForWorkIdle();
+    mAcceptNotifications = true;
     core->preEnroll();
     core->enroll(toTaAuthToken(hat), static_cast<uint32_t>(mUserId));
     core->setWorkMode(WorkMode::Enroll);
@@ -263,6 +266,8 @@ ndk::ScopedAStatus BiometricsFpSession::authenticate(int64_t operationId,
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
     }
     IFingerprintCore* core = mContext->core();
+    mContext->waitForWorkIdle();
+    mAcceptNotifications = true;
     core->authenticate(static_cast<uint64_t>(operationId), static_cast<uint32_t>(mUserId));
     core->setWorkMode(WorkMode::Authenticate);
     // AOSP has already started authentication when the finger arrives. Give
@@ -283,6 +288,8 @@ ndk::ScopedAStatus BiometricsFpSession::detectInteraction(
     }
     // No TA command here: the group was bound when the session was created and
     // the vendor's detect path only arms the mode and the touch routing.
+    mContext->waitForWorkIdle();
+    mAcceptNotifications = true;
     mContext->core()->setWorkMode(WorkMode::Detect);
     setTouchRouting(true);
     if (out != nullptr) {
@@ -295,6 +302,7 @@ ndk::ScopedAStatus BiometricsFpSession::enumerateEnrollments() {
     if (mContext == nullptr || mContext->core() == nullptr) {
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
     }
+    mContext->waitForWorkIdle();
     std::vector<uint32_t> fingerIds;
     const int ret = mContext->core()->enumerate(&fingerIds);
     if (ret != 0) {
@@ -319,6 +327,8 @@ ndk::ScopedAStatus BiometricsFpSession::removeEnrollments(
     if (mContext == nullptr || mContext->core() == nullptr) {
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
     }
+    mContext->waitForWorkIdle();
+    mAcceptNotifications = true;
     for (int32_t id : enrollmentIds) {
         // A failed removal must not surface as an exception: the framework does
         // not catch service-specific errors here and its system server would
@@ -332,6 +342,7 @@ ndk::ScopedAStatus BiometricsFpSession::getAuthenticatorId() {
     if (mContext == nullptr || mContext->core() == nullptr) {
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
     }
+    mContext->waitForWorkIdle();
     uint64_t id = 0;
     const int ret = mContext->core()->getAuthenticatorId(&id);
     if (ret != 0) {
@@ -368,6 +379,7 @@ ndk::ScopedAStatus BiometricsFpSession::close() {
         return ndk::ScopedAStatus::ok();
     }
     mClosed = true;
+    mAcceptNotifications = false;
     if (mContext != nullptr && mContext->core() != nullptr) {
         // Drops the session's work mode, so touches arriving after it do
         // nothing, then aborts any operation still open in the TA. The vendor

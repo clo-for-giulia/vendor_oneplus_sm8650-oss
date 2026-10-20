@@ -341,15 +341,14 @@ among the pieces not reimplemented.
 
 An operation ends where the framework says it does: when it cancels the
 cancellation signal it was handed — screen off, a higher-priority client,
-dismissal — and it never closes the session in between, so the session drops
-the work mode, aborts the operation in the TA, wakes the worker if it is
-waiting for the UI, and waits for that worker to finish before it reports
-CANCELED. The framework's clients only finish on that error; without it the
-scheduler keeps the old operation current until its watchdog, and the next
-screen-on operation — which is what asks SystemUI for the UDFPS overlay —
-starts late. Waiting for the worker before the acknowledgement also keeps the
-next operation from starting while the aborted one is still cleaning up in
-the TA.
+dismissal — and it never closes the session in between. The session stops
+accepting results, drops the work mode, aborts the operation in the TA, wakes
+the worker if it is waiting for the UI and releases the touch routing. It then
+reports CANCELED immediately instead of waiting for the worker to finish, so
+the framework's screen-off/wake handoff is not delayed. The next operation
+waits for the worker before it touches the TA, and late results from the
+aborted operation are discarded, so cleanup is overlapped without racing the
+new operation.
 
 No session call surfaces a TA failure as a service-specific error: the
 framework's clients only catch `RemoteException`, so an error thrown from, for
