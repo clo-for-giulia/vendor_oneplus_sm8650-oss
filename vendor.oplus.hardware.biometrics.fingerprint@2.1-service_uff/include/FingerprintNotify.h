@@ -25,6 +25,7 @@ struct FingerprintMsg {
     static constexpr int32_t kTypeEnroll = 3;
     static constexpr int32_t kTypeRemoved = 4;
     static constexpr int32_t kTypeAuthenticated = 5;
+    static constexpr int32_t kTypeInteractionDetected = 15;
     static constexpr int32_t kTypeError = -1;
 
     // android.hardware.biometrics.fingerprint.Error values.
@@ -50,6 +51,8 @@ class FingerprintNotify {
 
     void notifyEnrollResult(uint32_t fid, uint32_t gid, int32_t remaining);
     void notifyAuthResult(uint32_t fid, uint32_t gid);
+    // Reports a touch from the keyguard's interaction-detect mode.
+    void notifyInteractionDetected();
     void notifyRemove(uint32_t gid, uint32_t fid, uint32_t remaining);
 
     // Reports a failure to the framework. Takes an

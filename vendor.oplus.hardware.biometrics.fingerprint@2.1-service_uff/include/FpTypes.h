@@ -56,6 +56,10 @@ enum class WorkMode : int32_t {
     // only accepts these two values there.
     Enroll = 2,
     Authenticate = 3,
+    // Keyguard interaction detection: no TA command. A touch-down is reported
+    // as onInteractionDetected() and the framework starts the real
+    // authentication; the value is the vendor's.
+    Detect = 17,
 };
 
 }  // namespace fingerprint

@@ -46,6 +46,12 @@ void FingerprintNotify::notifyAuthResult(uint32_t fid, uint32_t gid) {
     emit(message);
 }
 
+void FingerprintNotify::notifyInteractionDetected() {
+    FingerprintMsg message;
+    message.type = FingerprintMsg::kTypeInteractionDetected;
+    emit(message);
+}
+
 void FingerprintNotify::notifyRemove(uint32_t gid, uint32_t fid, uint32_t remaining) {
     FingerprintMsg message;
     message.type = FingerprintMsg::kTypeRemoved;

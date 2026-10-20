@@ -147,6 +147,9 @@ void BiometricsFpSession::notify(const FingerprintMsg& message) {
                 mCallback->onAuthenticationFailed();
             }
             break;
+        case FingerprintMsg::kTypeInteractionDetected:
+            mCallback->onInteractionDetected();
+            break;
         case FingerprintMsg::kTypeError:
             // A capture interrupted by the framework's cancel reports CANCELED
             // here too, but the cancellation signal already acknowledged it.
@@ -245,7 +248,7 @@ ndk::ScopedAStatus BiometricsFpSession::detectInteraction(
     }
     // No TA command here: the group was bound when the session was created and
     // the vendor's detect path only arms the mode and the touch routing.
-    mContext->core()->setWorkMode(WorkMode::Authenticate);
+    mContext->core()->setWorkMode(WorkMode::Detect);
     setTouchRouting(true);
     if (out != nullptr) {
         *out = makeCancellationSignal();

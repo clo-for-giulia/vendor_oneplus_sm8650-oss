@@ -385,6 +385,14 @@ int IFingerprintCore::setWorkMode(WorkMode mode) {
 }
 
 int IFingerprintCore::doTouchDownEvent() {
+    if (mWorkMode == WorkMode::Detect) {
+        // The keyguard only wants to know that a finger is there; the real
+        // authentication is started by the framework after this callback.
+        if (mNotify != nullptr) {
+            mNotify->notifyInteractionDetected();
+        }
+        return 0;
+    }
     if (mWorkMode == WorkMode::Enroll) {
         return enrollDown();
     }

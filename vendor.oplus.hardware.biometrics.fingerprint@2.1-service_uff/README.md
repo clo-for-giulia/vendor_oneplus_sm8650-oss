@@ -271,7 +271,10 @@ socket plus an eventfd, which teardown signals to break it out of the wait.
 
 Touch flow: kernel `TP_TOUCHDOWN` → `HalContext::onDeviceEvent` →
 `IFingerprintCore::doTouchDownEvent` → `OpticalCore::authenticateDown` /
-`enrollDown` → `captureImg`. `UI_READY` posts the UI-ready semaphore that
+`enrollDown` → `captureImg`. In the keyguard's interaction-detect mode the
+touch only reports `onInteractionDetected` and lets the framework start the
+real authentication, which is what the vendor does with work mode 17.
+`UI_READY` posts the UI-ready semaphore that
 `authenticateDown` (1000 ms) / `enrollDown` (500 ms) wait on. `enrollDown`
 first re-reads the panel temperature from the driver
 (`FP_IOC_LHBM_TEMPERATURE`) and forwards it with `EnrollTemperature` (2007),
