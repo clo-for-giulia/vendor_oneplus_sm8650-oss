@@ -42,7 +42,8 @@ class FpCa {
     // Forwards the HMAC key from the keymaster TA to the fingerprint TA.
     virtual int sendHmacKeyToFpta() = 0;
 
-    // Size of the trailing TA log buffer, read from the TA config.
+    // Size of the trailing TA log buffer. FingerprintConfig caps this unless
+    // persist.vendor.fingerprint.talog enables full TA logging.
     void setExtraLength(uint32_t length) { mExtraLength = length; }
 
     const std::string& name() const { return mName; }

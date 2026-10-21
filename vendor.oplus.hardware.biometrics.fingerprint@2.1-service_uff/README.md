@@ -83,7 +83,7 @@ transport fields):
 | `+0x04` | `u32 cmd` |
 | `+0x10` | `u64 timestamp` (ms since local midnight, filled by `FpCa`) |
 | `+0x18` | `u32 cmd_len` (filled by `FpCa`) |
-| `+0x1c` | `u32 extra_len` (TA log buffer size, from TA config, filled by `FpCa`) |
+| `+0x1c` | `u32 extra_len` (TA log buffer size, from TA config; capped unless `talog` is enabled, filled by `FpCa`) |
 | `+0x30` | command parameters |
 
 Command ids (all module 2 unless noted), with buffer size and the response
@@ -182,7 +182,9 @@ On a successful send the TA's log lines are printed from that same area
 (tagged `[talog]`, debug and verbose dropped), exactly like the vendor does.
 A rejected command always prints them, so it comes with the TA's own reason
 for it; on success they are opt-in through `persist.vendor.fingerprint.talog`,
-because printing them is a logd write per line on the capture path.
+because printing them is a logd write per line on the capture path. Unless
+that property is enabled, the HAL caps the trailing log area at 256 bytes;
+enabling it restores the TA's configured log-buffer length.
 
 > The TEE transport is the one piece not reimplemented: `libQSEEComAPI` is a
 > proprietary blob already present in the ROM. Everything above it — framing,
@@ -395,7 +397,8 @@ empty in this build) and a conditional GPIO-idle reset around the capture.
 component version derived from `/mnt/vendor/persist/fingerprint/`. At init it
 sends the TA base config (`0x834`) and queries the TA config fields (`0x835`):
 the log-buffer length, the HMAC-key gate, the brightness strategy, and the
-sensor identity and geometry.
+sensor identity and geometry. The log buffer is capped at 256 bytes unless
+`persist.vendor.fingerprint.talog` is enabled.
 
 The geometry is authoritative from the TA (selectors `0x0a`–`0x11`) and is
 published back to `persist.vendor.fingerprint.*` exactly as the vendor's
