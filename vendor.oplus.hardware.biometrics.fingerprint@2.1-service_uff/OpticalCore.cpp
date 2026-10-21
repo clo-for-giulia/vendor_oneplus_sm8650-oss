@@ -26,10 +26,10 @@ namespace {
 constexpr int kAuthUireadyTimeoutMs = 1000;
 constexpr int kEnrollUireadyTimeoutMs = 500;
 constexpr int kMaxCaptureRetries = 3;
-// A pre-armed AuthenticateStart is only reused for an imminent touch. If the
-// framework starts authentication early and the finger arrives much later, send
-// the command again from the touch path so the TA is not left with stale state.
-constexpr int64_t kAuthPrearmMaxAgeNs = 1'000'000'000;
+// AOSP commonly starts authentication one to two seconds before the finger
+// arrives. Keep the pre-armed command for the operation, but send it again from
+// the touch path after ten seconds so the TA is not left with stale state.
+constexpr int64_t kAuthPrearmMaxAgeNs = 10'000'000'000;
 
 uint64_t elapsedUs(std::chrono::steady_clock::time_point start) {
     return static_cast<uint64_t>(

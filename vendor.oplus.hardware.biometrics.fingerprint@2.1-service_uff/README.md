@@ -335,11 +335,11 @@ it every touch is rejected with "invalid mode 0").
 operation id. The optical core also sends `AuthenticateStart` (2013) when the
 framework starts authentication, because AOSP requests authentication before
 the finger arrives. The touch path only has to capture; if the pre-arm failed,
-or the touch arrives after the short pre-arm window, it sends `AuthenticateStart`
-itself. Cancelling a session forwards `Cancel` (2019), which aborts the
-operation inside the algorithm; a failed enroll ends the session with
-`EnrollFinish` (2102) and then cancels, a failed authenticate ends with
-`AuthenticateFinish` (2071) — the vendor's failure sequences.
+or the touch arrives after the ten-second pre-arm window, it sends
+`AuthenticateStart` itself. Cancelling a session forwards `Cancel` (2019),
+which aborts the operation inside the algorithm; a failed enroll ends the
+session with `EnrollFinish` (2102) and then cancels, a failed authenticate
+ends with `AuthenticateFinish` (2071) — the vendor's failure sequences.
 
 A successful compare returns the packed `hw_auth_token_t` at `+0x88`. The
 session converts it to the AIDL token (a fingerprint token is host ordered,
