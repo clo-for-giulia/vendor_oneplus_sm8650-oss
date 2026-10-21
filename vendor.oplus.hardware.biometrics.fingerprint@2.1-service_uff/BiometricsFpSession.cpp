@@ -14,6 +14,8 @@
 #include "PerfTrace.h"
 #include "Utils.h"
 
+#include <aidl/android/hardware/biometrics/common/DisplayState.h>
+
 #include <android-base/logging.h>
 
 #include <algorithm>
@@ -22,6 +24,7 @@
 #include <cstdio>
 #include <cstring>
 
+using aidl::android::hardware::biometrics::common::DisplayState;
 using aidl::android::hardware::biometrics::fingerprint::AcquiredInfo;
 using aidl::android::hardware::biometrics::fingerprint::Error;
 using aidl::android::hardware::keymaster::HardwareAuthToken;
@@ -158,6 +161,7 @@ BiometricsFpSession::makeCancellationSignal() {
         if (mContext->common() != nullptr) {
             mContext->common()->cancelUiready();
         }
+        mContext->disableUireadyReuse();
         setTouchReport(false);
         if (mCallback != nullptr) {
             mCallback->onError(Error::CANCELED, 0);
@@ -259,7 +263,11 @@ ndk::ScopedAStatus BiometricsFpSession::enroll(const HardwareAuthToken& hat,
     }
     IFingerprintCore* core = mContext->core();
     const auto setupStart = std::chrono::steady_clock::now();
+    mContext->beginUireadyOperation(false, false);
     mContext->waitForWorkIdle();
+    if (mContext->common() != nullptr) {
+        mContext->common()->clearUireadyCancellation();
+    }
     mContext->perf().clearSetup();
     mAcceptNotifications = true;
     core->preEnroll();
@@ -275,12 +283,25 @@ ndk::ScopedAStatus BiometricsFpSession::enroll(const HardwareAuthToken& hat,
 
 ndk::ScopedAStatus BiometricsFpSession::authenticate(int64_t operationId,
                                                      std::shared_ptr<ICancellationSignal>* out) {
+    return authenticateInternal(operationId, false, out);
+}
+
+ndk::ScopedAStatus BiometricsFpSession::authenticateInternal(
+        int64_t operationId, bool displayOn,
+        std::shared_ptr<ICancellationSignal>* out) {
     if (mContext == nullptr || mContext->core() == nullptr) {
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
     }
     IFingerprintCore* core = mContext->core();
     const auto setupStart = std::chrono::steady_clock::now();
+    // Select the UI-ready mode before waiting for the previous worker, so this
+    // operation's UI_READY is not dropped while the old AuthenticateFinish is
+    // still unwinding.
+    mContext->beginUireadyOperation(true, displayOn);
     mContext->waitForWorkIdle();
+    if (mContext->common() != nullptr) {
+        mContext->common()->clearUireadyCancellation();
+    }
     mContext->perf().clearSetup();
     mAcceptNotifications = true;
     core->authenticate(static_cast<uint64_t>(operationId), static_cast<uint32_t>(mUserId));
@@ -305,7 +326,11 @@ ndk::ScopedAStatus BiometricsFpSession::detectInteraction(
     // No TA command here: the group was bound when the session was created and
     // the detect path only arms the work mode and screen-on touch reporting.
     const auto setupStart = std::chrono::steady_clock::now();
+    mContext->beginUireadyOperation(false, false);
     mContext->waitForWorkIdle();
+    if (mContext->common() != nullptr) {
+        mContext->common()->clearUireadyCancellation();
+    }
     mContext->perf().clearSetup();
     mAcceptNotifications = true;
     mContext->core()->setWorkMode(WorkMode::Detect);
@@ -411,6 +436,9 @@ ndk::ScopedAStatus BiometricsFpSession::close() {
     if (mContext != nullptr && mContext->common() != nullptr) {
         mContext->common()->cancelUiready();
     }
+    if (mContext != nullptr) {
+        mContext->disableUireadyReuse();
+    }
     setTouchReport(false);
     if (mContext != nullptr) {
         // Do not let the next session run while this one is still unwinding.
@@ -456,8 +484,12 @@ ndk::ScopedAStatus BiometricsFpSession::authenticateWithContext(
         int64_t operationId,
         const aidl::android::hardware::biometrics::common::OperationContext& context,
         std::shared_ptr<ICancellationSignal>* out) {
-    (void)context;
-    return authenticate(operationId, out);
+    // AOSP starts authentication before the finger arrives. When the display
+    // is already on, the panel's UI_READY event belongs to this operation's
+    // overlay and can be consumed by the touch. When the display is off or
+    // dozing, the touch wakes it and the HAL must wait for the post-wake event.
+    return authenticateInternal(operationId,
+                                context.displayState == DisplayState::LOCKSCREEN, out);
 }
 
 ndk::ScopedAStatus BiometricsFpSession::enrollWithContext(
@@ -488,7 +520,13 @@ ndk::ScopedAStatus BiometricsFpSession::onPointerUpWithContext(
 
 ndk::ScopedAStatus BiometricsFpSession::onContextChanged(
         const aidl::android::hardware::biometrics::common::OperationContext& context) {
-    (void)context;
+    // AOSP starts authentication while the display is dozing. If the display
+    // reaches the lockscreen before the finger arrives, the overlay/HBM event
+    // is now usable; if it goes away, drop back to the touch-time reset. Only
+    // authentication operations are allowed to promote reuse.
+    if (mContext != nullptr) {
+        mContext->updateUireadyDisplayState(context.displayState == DisplayState::LOCKSCREEN);
+    }
     return ndk::ScopedAStatus::ok();
 }
 

@@ -83,6 +83,9 @@ class BiometricsFpSession
 
   private:
     std::shared_ptr<ICancellationSignal> makeCancellationSignal();
+    ndk::ScopedAStatus authenticateInternal(
+            int64_t operationId, bool displayOn,
+            std::shared_ptr<ICancellationSignal>* out);
     void notify(const FingerprintMsg& message);
     void dispatchTouch(bool down);
     // Enables normal-touch fingerprint reporting for the operation. The HBP

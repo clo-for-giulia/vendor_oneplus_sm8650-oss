@@ -272,8 +272,9 @@ callback has recorded a sender port id. Each event arrives as a 16-byte
 `nlmsghdr` followed by `fingerprint_message_t` (`module`, `event`, `in_size`,
 `in_buf[128]`, `out_size`, `out_buf[128]`); the event code is at `+0x04` and
 touch coordinates land in `out_buf`. Events the optical path uses:
-`TP_TOUCHDOWN=4`, `TP_TOUCHUP=5`, `UI_READY=6`. The reader blocks on the
-socket plus an eventfd, which teardown signals to break it out of the wait.
+`TP_TOUCHDOWN=4`, `TP_TOUCHUP=5`, `UI_READY=6`, `UI_DISAPPEAR=7`. The reader
+blocks on the socket plus an eventfd, which teardown signals to break it out
+of the wait.
 
 Instrumentation: setting `persist.vendor.fingerprint.perf=1` emits one
 `Perf:` line per operation. It records the accepted touch source, kernel and
@@ -288,10 +289,17 @@ worker (the vendor's EventThd/WorkThd split) → `IFingerprintCore::doTouchDownE
 → `OpticalCore::authenticateDown` / `enrollDown` → `captureImg`. A new
 touch-down drops any UI-ready post left by screen-off, wake or the previous
 operation, so the capture cannot consume an overlay event that does not belong
-to it. The worker then waits for the panel driver's `UI_READY` event (posted by
-the reader) for up to 1000/500 ms; keeping the capture off the reader is what
-lets that event arrive while it waits. This event is the capture gate because
-it reports that the pressed icon and HBM are scanning. The framework's
+to it. Authentication is the exception: AOSP can start it while the display
+is dozing, so a later `onContextChanged` with `DisplayState::LOCKSCREEN`
+promotes the operation to reuse the `UI_READY` posted when its overlay and HBM
+were configured. If the display is still dozing when the touch arrives, the
+reset stays in place and the worker waits for the panel after the wake.
+`onContextChanged` drops back to the reset if the display goes away, and
+`UI_DISAPPEAR=7` drops a latch left by an older overlay.
+The worker waits for the panel driver's `UI_READY` event (posted by the
+reader) for up to 1000/500 ms; keeping the capture off the reader is what lets
+that event arrive while it waits. This event is the capture gate because it
+reports that the pressed icon and HBM are scanning. The framework's
 `onUiReady` callback only says that its overlay view is configured, so it does
 not post the latch. A timeout or cancel aborts the operation instead of
 capturing outside the overlay window. In the

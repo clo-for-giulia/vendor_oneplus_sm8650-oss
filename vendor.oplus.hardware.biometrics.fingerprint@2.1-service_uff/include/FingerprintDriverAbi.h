@@ -68,6 +68,7 @@ enum class PowerState : int32_t {
 constexpr int kEventTpTouchdown = 4;
 constexpr int kEventTpTouchup = 5;
 constexpr int kEventUiReady = 6;
+constexpr int kEventUiDisappear = 7;
 
 // Transports the driver can deliver on, as reported by kIocReadNetlinkValue.
 constexpr int32_t kTransportNetlink = 1;

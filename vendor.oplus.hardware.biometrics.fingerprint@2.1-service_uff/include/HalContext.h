@@ -10,6 +10,7 @@
 #include "FpTypes.h"
 #include "PerfTrace.h"
 
+#include <atomic>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -47,6 +48,16 @@ class HalContext {
     // AIDL pointer path both come through here.
     void postTouchDown(PerfTrace::Source source);
 
+    // Screen-on authentication may consume the UI_READY that was posted when
+    // its overlay and HBM were configured before the touch. A screen-off or
+    // display-wake operation must still drop that event and wait for the panel
+    // after the touch. AOSP can start authentication while the display is
+    // dozing; the later context update promotes reuse once the display is up.
+    // UI_DISAPPEAR clears a latch left by an older overlay.
+    void beginUireadyOperation(bool allowReuse, bool displayOn);
+    void updateUireadyDisplayState(bool displayOn);
+    void disableUireadyReuse();
+
     FpCa* ca() const { return mCa.get(); }
     Device* device() const { return mDevice.get(); }
     FingerprintCommon* common() const { return mCommon.get(); }
@@ -76,6 +87,11 @@ class HalContext {
     std::unique_ptr<FingerprintNotify> mNotify;
     std::unique_ptr<IFingerprintCore> mCore;
     PerfTrace mPerf;
+
+    // Written by the session thread and read by the driver reader. Allowed is
+    // true for an authentication operation; reuse is the current display gate.
+    std::atomic<bool> mUireadyReuseAllowed{false};
+    std::atomic<bool> mReuseUiready{false};
 
     TaName mTaName = TaName::UffGx;
     bool mInitialized = false;

@@ -28,6 +28,14 @@ class FingerprintCommon {
     // that arrived while the display was off or waking.
     void resetUiready();
 
+    // Drops a posted UI-ready event without clearing a pending cancellation.
+    // Used when the panel reports that the overlay/HBM has gone away.
+    void clearUiready();
+
+    // Clears a cancellation left by the previous operation without dropping a
+    // UI_READY that may already have been posted for the new one.
+    void clearUireadyCancellation();
+
     // Wakes a pending waitUiready and makes it fail. Used when an operation is
     // cancelled or the HAL is shutting down, so a capture waiting for the UI
     // does not keep the worker busy.

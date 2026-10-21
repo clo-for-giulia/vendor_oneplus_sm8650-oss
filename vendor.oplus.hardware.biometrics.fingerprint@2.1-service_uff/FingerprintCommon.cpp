@@ -43,6 +43,16 @@ void FingerprintCommon::resetUiready() {
     mUireadyCancelled = false;
 }
 
+void FingerprintCommon::clearUiready() {
+    std::lock_guard<std::mutex> lock(mMutex);
+    mUireadyPosted = false;
+}
+
+void FingerprintCommon::clearUireadyCancellation() {
+    std::lock_guard<std::mutex> lock(mMutex);
+    mUireadyCancelled = false;
+}
+
 void FingerprintCommon::cancelUiready() {
     {
         std::lock_guard<std::mutex> lock(mMutex);

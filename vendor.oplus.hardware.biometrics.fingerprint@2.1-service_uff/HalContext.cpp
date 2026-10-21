@@ -65,6 +65,15 @@ void HalContext::onDeviceEvent(const driver::FingerprintMessage& message) {
                 mCommon->postUiready();
             }
             break;
+        case driver::kEventUiDisappear:
+            // The overlay/HBM for the previous state is gone. Do not let a
+            // screen-on operation consume that stale latch. Do not disable the
+            // operation's reuse mode: an overlay transition can post
+            // UI_DISAPPEAR before the new UI_READY.
+            if (mCommon != nullptr) {
+                mCommon->clearUiready();
+            }
+            break;
         default:
             break;
     }
@@ -97,6 +106,24 @@ void HalContext::stopWorkThread() {
     mWorkActive = false;
 }
 
+void HalContext::beginUireadyOperation(bool allowReuse, bool displayOn) {
+    mUireadyReuseAllowed.store(allowReuse, std::memory_order_relaxed);
+    mReuseUiready.store(allowReuse && displayOn, std::memory_order_relaxed);
+}
+
+void HalContext::updateUireadyDisplayState(bool displayOn) {
+    if (!mUireadyReuseAllowed.load(std::memory_order_relaxed)) {
+        mReuseUiready.store(false, std::memory_order_relaxed);
+        return;
+    }
+    mReuseUiready.store(displayOn, std::memory_order_relaxed);
+}
+
+void HalContext::disableUireadyReuse() {
+    mUireadyReuseAllowed.store(false, std::memory_order_relaxed);
+    mReuseUiready.store(false, std::memory_order_relaxed);
+}
+
 void HalContext::postTouchDown(PerfTrace::Source source) {
     {
         std::lock_guard<std::mutex> lock(mWorkMutex);
@@ -106,10 +133,11 @@ void HalContext::postTouchDown(PerfTrace::Source source) {
             mPerf.notePost(source, false);
             return;
         }
-        // The overlay event belongs to the touch that is starting. Drop a post
-        // left over from screen-off, wake or the previous operation before the
-        // worker starts waiting for this one.
-        if (mCommon != nullptr) {
+        // A screen-on authentication keeps the UI_READY posted when its
+        // overlay and HBM were configured. Every other path drops the event:
+        // a screen-off touch wakes the display itself and must wait for the
+        // panel after that wake. UI_DISAPPEAR clears an older overlay's latch.
+        if (mCommon != nullptr && !mReuseUiready.load(std::memory_order_relaxed)) {
             mCommon->resetUiready();
         }
         mPerf.begin(source);
@@ -247,6 +275,7 @@ int HalContext::deinit() {
     if (mCommon != nullptr) {
         mCommon->cancelUiready();
     }
+    disableUireadyReuse();
     stopWorkThread();
 
     if (mDevice != nullptr) {
