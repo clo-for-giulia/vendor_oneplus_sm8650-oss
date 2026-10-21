@@ -53,7 +53,7 @@ void HalContext::onDeviceEvent(const driver::FingerprintMessage& message) {
         case driver::kEventTpTouchdown:
             // The capture can block on TA commands and on UI_READY; keep it off
             // the reader so UI_READY, touch-up and screen events still flow.
-            postTouchDown();
+            postTouchDown(PerfTrace::Source::Kernel);
             break;
         case driver::kEventTpTouchup:
             if (mCore != nullptr) {
@@ -97,12 +97,13 @@ void HalContext::stopWorkThread() {
     mWorkActive = false;
 }
 
-void HalContext::postTouchDown() {
+void HalContext::postTouchDown(PerfTrace::Source source) {
     {
         std::lock_guard<std::mutex> lock(mWorkMutex);
         // Drop a second down while one is queued or running; the framework is
         // not ready for it and the vendor drops these too.
         if (!mWorkRunning || mTouchPending || mWorkActive) {
+            mPerf.notePost(source, false);
             return;
         }
         // The overlay event belongs to the touch that is starting. Drop a post
@@ -111,6 +112,8 @@ void HalContext::postTouchDown() {
         if (mCommon != nullptr) {
             mCommon->resetUiready();
         }
+        mPerf.begin(source);
+        mPerf.notePost(source, true);
         mTouchPending = true;
     }
     mWorkCond.notify_one();
@@ -126,9 +129,13 @@ void HalContext::workThreadLoop() {
             }
             mWorkActive = true;
         }
+        mPerf.mark("worker");
+        int result = 0;
         if (mCore != nullptr) {
-            mCore->doTouchDownEvent();
+            result = mCore->doTouchDownEvent();
         }
+        mPerf.mark("core");
+        mPerf.finish(result);
         {
             std::lock_guard<std::mutex> lock(mWorkMutex);
             mTouchPending = false;

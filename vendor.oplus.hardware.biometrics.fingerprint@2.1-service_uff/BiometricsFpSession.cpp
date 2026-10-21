@@ -11,12 +11,14 @@
 #include "FingerprintCommon.h"
 #include "HalContext.h"
 #include "IFingerprintCore.h"
+#include "PerfTrace.h"
 #include "Utils.h"
 
 #include <android-base/logging.h>
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 
@@ -100,6 +102,13 @@ void mapAcquired(int32_t code, AcquiredInfo* info, int32_t* vendorCode) {
             *vendorCode = code;
             break;
     }
+}
+
+uint64_t elapsedUs(std::chrono::steady_clock::time_point start) {
+    return static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::steady_clock::now() - start)
+                    .count());
 }
 }  // namespace
 
@@ -204,7 +213,7 @@ void BiometricsFpSession::dispatchTouch(bool down) {
         return;
     }
     if (down) {
-        mContext->postTouchDown();
+        mContext->postTouchDown(PerfTrace::Source::Pointer);
     } else {
         mContext->core()->doTouchUpEvent();
     }
@@ -249,12 +258,15 @@ ndk::ScopedAStatus BiometricsFpSession::enroll(const HardwareAuthToken& hat,
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
     }
     IFingerprintCore* core = mContext->core();
+    const auto setupStart = std::chrono::steady_clock::now();
     mContext->waitForWorkIdle();
+    mContext->perf().clearSetup();
     mAcceptNotifications = true;
     core->preEnroll();
     core->enroll(toTaAuthToken(hat), static_cast<uint32_t>(mUserId));
     core->setWorkMode(WorkMode::Enroll);
     setTouchReport(true);
+    mContext->perf().recordSetup("enroll", elapsedUs(setupStart));
     if (out != nullptr) {
         *out = makeCancellationSignal();
     }
@@ -267,7 +279,9 @@ ndk::ScopedAStatus BiometricsFpSession::authenticate(int64_t operationId,
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
     }
     IFingerprintCore* core = mContext->core();
+    const auto setupStart = std::chrono::steady_clock::now();
     mContext->waitForWorkIdle();
+    mContext->perf().clearSetup();
     mAcceptNotifications = true;
     core->authenticate(static_cast<uint64_t>(operationId), static_cast<uint32_t>(mUserId));
     core->setWorkMode(WorkMode::Authenticate);
@@ -276,6 +290,7 @@ ndk::ScopedAStatus BiometricsFpSession::authenticate(int64_t operationId,
     // this did not run.
     core->prepareAuthenticate();
     setTouchReport(true);
+    mContext->perf().recordSetup("auth", elapsedUs(setupStart));
     if (out != nullptr) {
         *out = makeCancellationSignal();
     }
@@ -289,10 +304,13 @@ ndk::ScopedAStatus BiometricsFpSession::detectInteraction(
     }
     // No TA command here: the group was bound when the session was created and
     // the detect path only arms the work mode and screen-on touch reporting.
+    const auto setupStart = std::chrono::steady_clock::now();
     mContext->waitForWorkIdle();
+    mContext->perf().clearSetup();
     mAcceptNotifications = true;
     mContext->core()->setWorkMode(WorkMode::Detect);
     setTouchReport(true);
+    mContext->perf().recordSetup("detect", elapsedUs(setupStart));
     if (out != nullptr) {
         *out = makeCancellationSignal();
     }

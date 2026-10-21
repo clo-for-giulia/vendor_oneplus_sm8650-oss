@@ -8,6 +8,7 @@
 
 #include "FingerprintDriverAbi.h"
 #include "FpTypes.h"
+#include "PerfTrace.h"
 
 #include <condition_variable>
 #include <memory>
@@ -44,7 +45,7 @@ class HalContext {
 
     // Hands a display touch to the operation worker. The driver reader and the
     // AIDL pointer path both come through here.
-    void postTouchDown();
+    void postTouchDown(PerfTrace::Source source);
 
     FpCa* ca() const { return mCa.get(); }
     Device* device() const { return mDevice.get(); }
@@ -52,6 +53,7 @@ class HalContext {
     FingerprintConfig* config() const { return mConfig.get(); }
     FingerprintNotify* notify() const { return mNotify.get(); }
     IFingerprintCore* core() const { return mCore.get(); }
+    PerfTrace& perf() { return mPerf; }
 
     TaName selectedTa() const { return mTaName; }
     bool isInitialized() const { return mInitialized; }
@@ -73,6 +75,7 @@ class HalContext {
     std::unique_ptr<FingerprintConfig> mConfig;
     std::unique_ptr<FingerprintNotify> mNotify;
     std::unique_ptr<IFingerprintCore> mCore;
+    PerfTrace mPerf;
 
     TaName mTaName = TaName::UffGx;
     bool mInitialized = false;

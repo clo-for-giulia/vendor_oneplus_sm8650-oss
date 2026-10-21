@@ -30,6 +30,13 @@ constexpr int kMaxCaptureRetries = 3;
 // framework starts authentication early and the finger arrives much later, send
 // the command again from the touch path so the TA is not left with stale state.
 constexpr int64_t kAuthPrearmMaxAgeNs = 1'000'000'000;
+
+uint64_t elapsedUs(std::chrono::steady_clock::time_point start) {
+    return static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::steady_clock::now() - start)
+                    .count());
+}
 }  // namespace
 
 OpticalCore::OpticalCore(HalContext* context) : IFingerprintCore(context) {}
@@ -87,12 +94,15 @@ int OpticalCore::enrollDown() {
         return -1;
     }
     mContext->device()->setGpioResetValue(1);
+    mContext->perf().mark("enroll_enter");
 
     refreshTemperature();
     const int temperatureRet = setEnrollTemperature(mTemperature);
     if (temperatureRet != 0) {
+        mContext->perf().mark("abort");
         return abortEnroll(temperatureRet);
     }
+    mContext->perf().mark("enroll_down");
 
     if (mContext->common() != nullptr) {
         const int uireadyRet = mContext->common()->waitUiready(kEnrollUireadyTimeoutMs);
@@ -101,30 +111,39 @@ int OpticalCore::enrollDown() {
         // the overlay never became ready; capturing outside that window only
         // produces a bad frame and leaves the operation open.
         if (uireadyRet != 0 || isCancelled()) {
+            mContext->perf().mark("abort");
             return abortEnroll(-1);
         }
     }
+    mContext->perf().mark("ui_wait");
     delayAfterUiready();
+    mContext->perf().mark("post_ui");
 
     CaptureResult capture = {};
     int ret = captureImg(WorkMode::Enroll, 0, &capture);
     if (ret != 0) {
+        mContext->perf().mark("abort");
         return abortEnroll(ret);
     }
+    mContext->perf().mark("capture");
 
     int32_t feature = 0;
     const int featureRet = getFeature(WorkMode::Enroll, 0, &feature);
     if (featureRet != 0) {
+        mContext->perf().mark("abort");
         return abortEnroll(featureRet);
     }
+    mContext->perf().mark("feature");
 
     int32_t acquired = 0;
     uint32_t fid = 0;
     int32_t remaining = 0;
     ret = enrollImage(&acquired, &fid, &remaining);
     if (ret != 0) {
+        mContext->perf().mark("abort");
         return abortEnroll(ret);
     }
+    mContext->perf().mark("enroll_image");
 
     if (remaining <= 0) {
         // Last frame: persist the template first, the way the vendor does. A
@@ -133,14 +152,17 @@ int OpticalCore::enrollDown() {
         const int saveRet = enrollSaveTemplate();
         if (saveRet != 0) {
             LOG(ERROR) << "OpticalCore: cannot save the enroll template: " << saveRet;
+            mContext->perf().mark("abort");
             return abortEnroll(saveRet);
         }
+        mContext->perf().mark("save");
     }
 
     if (mNotify != nullptr) {
         mNotify->checkAcquiredInfo(acquired);
         mNotify->notifyEnrollResult(fid, mGroupId, remaining);
     }
+    mContext->perf().mark("notify");
 
     if (remaining <= 0) {
         // The vendor refreshes the enrollment list once the framework has been
@@ -153,6 +175,7 @@ int OpticalCore::enrollDown() {
             LOG(INFO) << "OpticalCore: enrollments after save: " << fingerIds.size();
         }
     }
+    mContext->perf().mark("enumerate");
 
     return 0;
 }
@@ -166,6 +189,7 @@ int OpticalCore::prepareAuthenticate() {
     // send it here and keep it off the touch path. A failure is retried by
     // authenticateDown() when the touch actually arrives.
     mAuthPrepared = false;
+    const auto prearmStart = std::chrono::steady_clock::now();
     refreshTemperature();
     int32_t result = 0;
     const int ret = IFingerprintCore::authenticateStart(&result);
@@ -174,6 +198,7 @@ int OpticalCore::prepareAuthenticate() {
                 std::chrono::steady_clock::now().time_since_epoch().count());
         mAuthPrepared = true;
     }
+    mContext->perf().recordSetup("prearm", elapsedUs(prearmStart));
     return ret;
 }
 
@@ -188,6 +213,7 @@ int OpticalCore::authenticateDown() {
         return -1;
     }
     mContext->device()->setGpioResetValue(1);
+    mContext->perf().mark("auth_enter");
 
     bool prepared = mAuthPrepared.exchange(false);
     if (prepared) {
@@ -197,8 +223,10 @@ int OpticalCore::authenticateDown() {
     }
     const int startRet = prepared ? 0 : authenticateStart();
     if (startRet != 0) {
+        mContext->perf().mark("abort");
         return abortAuth(startRet);
     }
+    mContext->perf().mark("auth_start");
 
     if (mContext->common() != nullptr) {
         const int uireadyRet = mContext->common()->waitUiready(kAuthUireadyTimeoutMs);
@@ -206,10 +234,13 @@ int OpticalCore::authenticateDown() {
         // not fall through to a capture: the finger may already be gone and the
         // TA would be left in an operation that never produced a frame.
         if (uireadyRet != 0 || isCancelled()) {
+            mContext->perf().mark("abort");
             return abortAuth(-1);
         }
     }
+    mContext->perf().mark("ui_wait");
     delayAfterUiready();
+    mContext->perf().mark("post_ui");
 
     int ret = 0;
     for (int attempt = 0; attempt < kMaxCaptureRetries; ++attempt) {
@@ -225,14 +256,18 @@ int OpticalCore::authenticateDown() {
         break;
     }
     if (ret != 0) {
+        mContext->perf().mark("abort");
         return abortAuth(ret);
     }
+    mContext->perf().mark("capture");
 
     int32_t feature = 0;
     const int featureRet = getFeature(WorkMode::Authenticate, 0, &feature);
     if (featureRet != 0) {
+        mContext->perf().mark("abort");
         return abortAuth(featureRet);
     }
+    mContext->perf().mark("feature");
 
     int32_t fingerId = 0;
     int32_t result = 0;
@@ -242,7 +277,9 @@ int OpticalCore::authenticateDown() {
         reportError(isCancelled() ? FingerprintMsg::kErrorCanceled
                                   : FingerprintMsg::kErrorUnableToProcess);
     }
+    mContext->perf().mark("compare");
     authenticateFinish();
+    mContext->perf().mark("finish");
 
     if (mNotify != nullptr) {
         if (fingerId > 0) {
@@ -251,6 +288,7 @@ int OpticalCore::authenticateDown() {
             mNotify->checkAcquiredInfo(result);
         }
     }
+    mContext->perf().mark("notify");
 
     return ret;
 }

@@ -16,6 +16,7 @@
 
 #include <android-base/logging.h>
 
+#include <chrono>
 #include <ctime>
 
 #include <algorithm>
@@ -65,7 +66,14 @@ int IFingerprintCore::sendTa(std::span<uint8_t> buffer) {
     if (mContext == nullptr || mContext->ca() == nullptr) {
         return -1;
     }
-    return mContext->ca()->sendCommand(buffer);
+    const auto start = std::chrono::steady_clock::now();
+    const int ret = mContext->ca()->sendCommand(buffer);
+    const uint64_t durationUs = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::steady_clock::now() - start)
+                    .count());
+    mContext->perf().recordTa(readU32(buffer, 0x04), durationUs);
+    return ret;
 }
 
 int IFingerprintCore::writeCalibrationData(const std::vector<uint8_t>& data) {
@@ -382,6 +390,9 @@ int IFingerprintCore::doTouchDownEvent() {
         // authentication is started by the framework after this callback.
         if (mNotify != nullptr) {
             mNotify->notifyInteractionDetected();
+        }
+        if (mContext != nullptr) {
+            mContext->perf().mark("detect_notify");
         }
         return 0;
     }

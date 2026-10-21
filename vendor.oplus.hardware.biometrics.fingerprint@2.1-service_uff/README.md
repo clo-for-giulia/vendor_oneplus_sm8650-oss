@@ -275,6 +275,12 @@ touch coordinates land in `out_buf`. Events the optical path uses:
 `TP_TOUCHDOWN=4`, `TP_TOUCHUP=5`, `UI_READY=6`. The reader blocks on the
 socket plus an eventfd, which teardown signals to break it out of the wait.
 
+Instrumentation: setting `persist.vendor.fingerprint.perf=1` emits one
+`Perf:` line per operation. It records the accepted touch source, kernel and
+AOSP pointer post counts, dropped posts, AIDL setup and pre-arm time, worker,
+UI-ready and post-UI delay, each core stage and each TA command. With the
+property unset the trace is limited to a few atomic counters.
+
 Touch flow: kernel `TP_TOUCHDOWN` → `HalContext::onDeviceEvent` → the touch
 worker (the vendor's EventThd/WorkThd split) → `IFingerprintCore::doTouchDownEvent`
 → `OpticalCore::authenticateDown` / `enrollDown` → `captureImg`. A new

@@ -35,6 +35,7 @@ cc_binary {
         "FingerprintConfig.cpp",
         "FingerprintNotify.cpp",
         "FingerprintCommon.cpp",
+        "PerfTrace.cpp",
         "Device.cpp",
         "FpCa.cpp",
         "QseeCa.cpp",
