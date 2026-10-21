@@ -75,6 +75,7 @@ class PerfTrace {
     std::mutex mMutex;
     Clock::time_point mStart;
     Clock::time_point mLast;
+    uint64_t mResultUs = 0;
     Source mSource = Source::Kernel;
     uint64_t mKernelPostsAtBegin = 0;
     uint64_t mPointerPostsAtBegin = 0;

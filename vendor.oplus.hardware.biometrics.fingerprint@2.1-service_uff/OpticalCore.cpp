@@ -278,9 +278,11 @@ int OpticalCore::authenticateDown() {
                                   : FingerprintMsg::kErrorUnableToProcess);
     }
     mContext->perf().mark("compare");
-    authenticateFinish();
-    mContext->perf().mark("finish");
 
+    // The token is complete after the compare. Publish it before the TA-side
+    // finish so the framework can unlock while the cleanup still runs. The
+    // worker stays busy until AuthenticateFinish returns, and the next
+    // operation waits for it, so the TA still sees one operation at a time.
     if (mNotify != nullptr) {
         if (fingerId > 0) {
             mNotify->notifyAuthResult(static_cast<uint32_t>(fingerId), mGroupId, token);
@@ -288,7 +290,10 @@ int OpticalCore::authenticateDown() {
             mNotify->checkAcquiredInfo(result);
         }
     }
-    mContext->perf().mark("notify");
+    mContext->perf().mark("result");
+
+    authenticateFinish();
+    mContext->perf().mark("finish");
 
     return ret;
 }

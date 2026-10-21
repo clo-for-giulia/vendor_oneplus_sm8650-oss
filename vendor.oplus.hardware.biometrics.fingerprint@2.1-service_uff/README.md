@@ -278,7 +278,9 @@ socket plus an eventfd, which teardown signals to break it out of the wait.
 Instrumentation: setting `persist.vendor.fingerprint.perf=1` emits one
 `Perf:` line per operation. It records the accepted touch source, kernel and
 AOSP pointer post counts, dropped posts, AIDL setup and pre-arm time, worker,
-UI-ready and post-UI delay, each core stage and each TA command. With the
+UI-ready and post-UI delay, each core stage and each TA command. `result_us` is
+the cumulative time to the authentication result; `total_us` also includes the
+TA `AuthenticateFinish` that runs after the result is published. With the
 property unset the trace is limited to a few atomic counters.
 
 Touch flow: kernel `TP_TOUCHDOWN` → `HalContext::onDeviceEvent` → the touch
@@ -331,8 +333,9 @@ operation inside the algorithm; a failed enroll ends the session with
 
 A successful compare returns the packed `hw_auth_token_t` at `+0x88`. The
 session converts it to the AIDL token (a fingerprint token is host ordered,
-other types are byte swapped) and hands it to the framework, which Keystore
-needs for strong, key-bound app authentication. `invalidateAuthenticatorId`
+other types are byte swapped) and hands it to the framework before the HAL
+sends `AuthenticateFinish`, which Keystore needs for strong, key-bound app
+authentication. `invalidateAuthenticatorId`
 reports the last id read by `GetAuthenticatorId`, as the vendor does, instead
 of zero, so the framework's authenticator-id map stays in sync.
 

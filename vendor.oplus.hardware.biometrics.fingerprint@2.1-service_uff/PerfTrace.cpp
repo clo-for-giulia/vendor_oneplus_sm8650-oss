@@ -9,6 +9,8 @@
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 
+#include <cstring>
+
 namespace android {
 namespace fingerprint {
 
@@ -65,6 +67,7 @@ void PerfTrace::begin(Source source) {
     mStages.clear();
     mTa.clear();
     mSource = source;
+    mResultUs = 0;
     mStart = Clock::now();
     mLast = mStart;
     mKernelPostsAtBegin = mKernelPosts.load(std::memory_order_relaxed);
@@ -87,6 +90,13 @@ void PerfTrace::mark(const char* stage) {
     }
     const uint64_t durationUs = static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::microseconds>(now - mLast).count());
+    if (std::strcmp(stage, "result") == 0) {
+        // The authentication result is published before AuthenticateFinish.
+        // Keep its own cumulative timestamp so the line shows the latency the
+        // framework actually sees, while total_us still covers the cleanup.
+        mResultUs = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::microseconds>(now - mStart).count());
+    }
     mStages.push_back({stage, durationUs});
     mLast = now;
 }
@@ -145,6 +155,7 @@ void PerfTrace::finish(int result) {
     std::string line = "Perf: src=";
     line += sourceName(mSource);
     line += " total_us=" + std::to_string(totalUs);
+    line += " result_us=" + std::to_string(mResultUs);
     line += " result=" + std::to_string(result);
     line += " posts=kernel=" + std::to_string(kernelPosts) + "/" +
             std::to_string(kernelAccepted);
