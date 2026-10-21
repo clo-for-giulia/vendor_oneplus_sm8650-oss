@@ -299,10 +299,12 @@ reset stays in place and the worker waits for the panel after the wake.
 The worker waits for the panel driver's `UI_READY` event (posted by the
 reader) for up to 1000/500 ms; keeping the capture off the reader is what lets
 that event arrive while it waits. This event is the capture gate because it
-reports that the pressed icon and HBM are scanning. The framework's
-`onUiReady` callback only says that its overlay view is configured, so it does
-not post the latch. A timeout or cancel aborts the operation instead of
-capturing outside the overlay window. In the
+reports that the pressed icon and HBM are scanning. The 15 ms post-UI settle
+delay is reduced by the event's age, so a latch posted before the touch only
+waits for the remaining part. The framework's `onUiReady` callback only says
+that its overlay view is configured, so it does not post the latch. A timeout
+or cancel aborts the operation instead of capturing outside the overlay
+window. In the
 keyguard's interaction-detect mode the touch only reports
 `onInteractionDetected` and lets the framework start the real authentication,
 which is what the vendor does with work mode 17. `enrollDown` first re-reads

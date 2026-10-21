@@ -6,7 +6,9 @@
 
 #pragma once
 
+#include <chrono>
 #include <condition_variable>
+#include <cstdint>
 #include <mutex>
 
 namespace android {
@@ -18,7 +20,9 @@ class FingerprintCommon {
     FingerprintCommon() = default;
 
     // Blocks until the UI-ready event arrives or the timeout (ms) elapses.
-    int waitUiready(int timeoutMs = 500);
+    // When postedAgeUs is non-null it receives how long the event had already
+    // been posted before this call; zero when it arrives while waiting.
+    int waitUiready(int timeoutMs = 500, int64_t* postedAgeUs = nullptr);
 
     // Signals the UI-ready wait.
     void postUiready();
@@ -44,6 +48,7 @@ class FingerprintCommon {
   private:
     std::mutex mMutex;
     std::condition_variable mCond;
+    std::chrono::steady_clock::time_point mUireadyAt;
     bool mUireadyPosted = false;
     bool mUireadyCancelled = false;
 };

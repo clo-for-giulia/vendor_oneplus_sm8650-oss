@@ -28,7 +28,7 @@ class OpticalCore : public IFingerprintCore {
 
   private:
     int authenticateStart();
-    void delayAfterUiready();
+    void delayAfterUiready(int64_t uireadyAgeUs);
     // Reads the panel temperature for the TA, mapping anything out of range to
     // the driver's "unknown" sentinel.
     void refreshTemperature();

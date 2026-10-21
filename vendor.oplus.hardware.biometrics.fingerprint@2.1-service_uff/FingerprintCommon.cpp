@@ -11,9 +11,21 @@
 namespace android {
 namespace fingerprint {
 
-int FingerprintCommon::waitUiready(int timeoutMs) {
+int FingerprintCommon::waitUiready(int timeoutMs, int64_t* postedAgeUs) {
     std::unique_lock<std::mutex> lock(mMutex);
+    if (postedAgeUs != nullptr) {
+        *postedAgeUs = 0;
+    }
+    auto postedAge = [this]() -> int64_t {
+        return static_cast<int64_t>(
+                std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::steady_clock::now() - mUireadyAt)
+                        .count());
+    };
     if (mUireadyPosted) {
+        if (postedAgeUs != nullptr) {
+            *postedAgeUs = postedAge();
+        }
         mUireadyPosted = false;
         return 0;
     }
@@ -24,6 +36,9 @@ int FingerprintCommon::waitUiready(int timeoutMs) {
     if (mUireadyCancelled) {
         return -1;
     }
+    if (postedAgeUs != nullptr) {
+        *postedAgeUs = postedAge();
+    }
     mUireadyPosted = false;
     return 0;
 }
@@ -31,6 +46,7 @@ int FingerprintCommon::waitUiready(int timeoutMs) {
 void FingerprintCommon::postUiready() {
     {
         std::lock_guard<std::mutex> lock(mMutex);
+        mUireadyAt = std::chrono::steady_clock::now();
         mUireadyPosted = true;
         mUireadyCancelled = false;
     }
