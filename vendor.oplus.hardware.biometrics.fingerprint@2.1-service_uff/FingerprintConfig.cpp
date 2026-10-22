@@ -41,10 +41,6 @@ constexpr size_t kBaseConfigProjectOffset = 0x30;
 constexpr size_t kBaseConfigLcdOffset = 0x50;
 constexpr size_t kBaseConfigLockStateOffset = 0x90;
 constexpr size_t kBaseConfigFieldSize = 0x20;
-// The TA's log area travels with every command. Keep enough room for a short
-// diagnostic line, but do not make every capture/compare carry the full
-// configured log buffer unless talog tracing is explicitly enabled.
-constexpr uint32_t kCompactTaLogBufferSize = 256;
 
 // Copies a string into one of the base configuration's fixed 32-byte fields.
 void writeField(std::vector<uint8_t>& buffer, size_t offset, const std::string& value) {
@@ -215,8 +211,9 @@ int FingerprintConfig::taConfigInit(FpCa* ca) {
         const uint32_t logLength = readU32(response, 0x38);
         const bool keepTaLog =
                 android::base::GetBoolProperty("persist.vendor.fingerprint.talog", false);
-        const uint32_t usedLength =
-                keepTaLog ? logLength : std::min(logLength, kCompactTaLogBufferSize);
+        // The log area is not consumed unless talog tracing is enabled. Send
+        // no trailing buffer on the normal path.
+        const uint32_t usedLength = keepTaLog ? logLength : 0;
         LOG(INFO) << "FingerprintConfig: TA log buffer " << logLength << " bytes, using "
                   << usedLength;
         ca->setExtraLength(usedLength);
