@@ -1,0 +1,74 @@
+/*
+ * Copyright (C) 2026 The YAAP Project
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Source replacement for the OPLUS touch AIDL service and the touch node
+ * configuration daemon. The HBP frame/algorithm path remains in the kernel and
+ * in the vendor S3910 firmware libraries; see README.md and docs/RE-NOTES.md.
+ */
+
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+cc_binary {
+    name: "vendor.oplus.hardware.touch@2.0-service",
+    stem: "vendor-oplus-hardware-touch-V2-service",
+    owner: "oneplus",
+    device_specific: true,
+    relative_install_path: "hw",
+
+    init_rc: ["etc/vendor-oplus-hardware-touch-V2-service.rc"],
+    vintf_fragments: ["etc/manifest_touch_aidl.xml"],
+
+    srcs: [
+        "main.cpp",
+        "OplusTouch.cpp",
+        "TouchNodeMap.cpp",
+    ],
+
+    shared_libs: [
+        "vendor.oplus.hardware.touch-V2-ndk",
+        "libbase",
+        "libbinder_ndk",
+        "libcutils",
+        "liblog",
+    ],
+
+    cpp_std: "c++20",
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+    ],
+    stl: "c++_shared",
+}
+
+cc_binary {
+    name: "touchDaemon",
+    stem: "touchDaemon",
+    owner: "oneplus",
+    device_specific: true,
+
+    init_rc: ["etc/init.touchDaemon.rc"],
+
+    srcs: [
+        "touchDaemon/TouchConfigDaemon.cpp",
+    ],
+
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "liblog",
+        "libtinyxml2",
+    ],
+
+    cpp_std: "c++20",
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+    ],
+    stl: "c++_shared",
+}
