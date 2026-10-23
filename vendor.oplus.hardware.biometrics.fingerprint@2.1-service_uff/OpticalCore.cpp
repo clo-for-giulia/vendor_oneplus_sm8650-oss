@@ -243,11 +243,16 @@ int OpticalCore::authenticateDown() {
         const int uireadyRet = mContext->common()->waitUiready(kAuthUireadyTimeoutMs,
                                                                &uireadyAgeUs);
         // The same overlay handshake gates authentication. A failed wait must
-        // not fall through to a capture: the finger may already be gone and the
-        // TA would be left in an operation that never produced a frame.
-        if (uireadyRet != 0 || isCancelled()) {
+        // not fall through to a capture. If the wait timed out, the touch was
+        // outside the sensor area or lifted early; ignore it without aborting
+        // the ongoing authentication session.
+        if (isCancelled()) {
             mContext->perf().mark("abort");
             return abortAuth(-1);
+        }
+        if (uireadyRet != 0) {
+            mContext->perf().mark("abort");
+            return 0;
         }
     }
     mContext->perf().mark("ui_wait");
@@ -300,6 +305,7 @@ int OpticalCore::authenticateDown() {
             mNotify->notifyAuthResult(static_cast<uint32_t>(fingerId), mGroupId, token);
         } else {
             mNotify->checkAcquiredInfo(result);
+            mNotify->notifyAuthResult(0, mGroupId, token);
         }
     }
     mContext->perf().mark("result");

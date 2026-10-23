@@ -488,8 +488,9 @@ ndk::ScopedAStatus BiometricsFpSession::authenticateWithContext(
     // is already on, the panel's UI_READY event belongs to this operation's
     // overlay and can be consumed by the touch. When the display is off or
     // dozing, the touch wakes it and the HAL must wait for the post-wake event.
-    return authenticateInternal(operationId,
-                                context.displayState == DisplayState::LOCKSCREEN, out);
+    const bool displayOn = context.displayState != DisplayState::NO_UI &&
+                           context.displayState != DisplayState::AOD;
+    return authenticateInternal(operationId, displayOn, out);
 }
 
 ndk::ScopedAStatus BiometricsFpSession::enrollWithContext(
@@ -521,11 +522,13 @@ ndk::ScopedAStatus BiometricsFpSession::onPointerUpWithContext(
 ndk::ScopedAStatus BiometricsFpSession::onContextChanged(
         const aidl::android::hardware::biometrics::common::OperationContext& context) {
     // AOSP starts authentication while the display is dozing. If the display
-    // reaches the lockscreen before the finger arrives, the overlay/HBM event
-    // is now usable; if it goes away, drop back to the touch-time reset. Only
+    // turns on before the finger arrives, the overlay/HBM event is now
+    // usable; if it goes away, drop back to the touch-time reset. Only
     // authentication operations are allowed to promote reuse.
     if (mContext != nullptr) {
-        mContext->updateUireadyDisplayState(context.displayState == DisplayState::LOCKSCREEN);
+        const bool displayOn = context.displayState != DisplayState::NO_UI &&
+                               context.displayState != DisplayState::AOD;
+        mContext->updateUireadyDisplayState(displayOn);
     }
     return ndk::ScopedAStatus::ok();
 }
