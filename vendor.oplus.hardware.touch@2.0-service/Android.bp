@@ -8,6 +8,13 @@
  * in the vendor S3910 firmware libraries; see README.md and docs/RE-NOTES.md.
  */
 
+
+soong_namespace {
+    imports: [
+        "hardware/oplus",
+    ],
+}
+
 package {
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
